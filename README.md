@@ -9,6 +9,7 @@ This toolset allows you to download transcripts from TWiT.tv and process them in
 *   **Resume Capability:** Skips already downloaded transcript files.
 *   **NotebookLM Ready:** Converts HTML to clean Markdown and chunks output files to stay under 500,000 words / 200MB limits.
 *   **Robust Logging:** Includes a `--debug` flag to trace the scraper's logic.
+*   **Security Hardened:** Enforces strict relative URL validation and sanitizes Markdown links to prevent SSRF and XSS.
 
 ## Usage
 
@@ -178,3 +179,12 @@ The Go implementation includes a test suite covering scraping, conversion, and u
 cd go
 go test ./...
 ```
+
+## Continuous Integration
+
+This repository uses GitHub Actions to automatically verify code quality. Every push and pull request triggers a workflow that:
+
+1.  **Tests Python Code:** Runs the full `unittest` suite.
+2.  **Tests Go Code:** Builds the Go module and runs `go test ./...`.
+
+You can view the status of these runs in the "Actions" tab of the repository.
