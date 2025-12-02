@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  test-python:
+    name: Test Python
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    - name: Run Python Tests
+      run: python3 -m unittest discover tests
+
+  test-go:
+    name: Test Go
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./go
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    - name: Verify Dependencies
+      run: go mod download
+    - name: Build
+      run: go build -v ./...
+    - name: Run Go Tests
+      run: go test -v ./...
