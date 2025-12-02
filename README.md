@@ -65,7 +65,7 @@ The output files will be saved in the `data/` directory with names like `IM_Tran
 
 ```mermaid
 graph TD
-    A[Start] --> B{Run fetcher (Py/Go)}
+    A[Start] --> B{"Run fetcher (Py/Go)"}
     B --> C[Scan TWiT.tv List Pages]
     C --> D{Found Episode?}
     D -- Yes --> E{Match Target Show?}
@@ -75,7 +75,7 @@ graph TD
     E -- No --> H
     D -- No --> I[Next Page / Finish]
     
-    J[Start Processing] --> K{Run processor (Py/Go)}
+    J[Start Processing] --> K{"Run processor (Py/Go)"}
     K --> L[Scan data/ for *.html]
     L --> M[Group by Show Prefix]
     M --> N[Convert HTML to Markdown]
