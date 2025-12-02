@@ -123,3 +123,19 @@ graph TD
 
 *   Python 3.x
 *   Standard libraries only (`urllib`, `re`, `argparse`, `glob`). No `pip install` required.
+
+## Development & Testing
+
+This project includes a comprehensive unit test suite using the standard `unittest` library.
+
+**To run the tests:**
+
+```bash
+python3 -m unittest discover tests
+```
+
+Tests cover:
+*   URL generation and page fetching (mocked).
+*   HTML parsing and regex logic.
+*   Markdown conversion and cleaning.
+*   Robustness and error handling.

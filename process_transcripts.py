@@ -86,35 +86,40 @@ def process_prefix(prefix):
     chunk_end_ep = None
     
     for filepath in files:
-        ep_num = get_ep_num(filepath)
-        title, date_str, content = parse_transcript_file(filepath)
-        
-        if chunk_start_ep is None:
-            chunk_start_ep = ep_num
+        try:
+            ep_num = get_ep_num(filepath)
+            title, date_str, content = parse_transcript_file(filepath)
             
-        episode_text = f"# Episode: {title}\n**Date:** {date_str}\n\n{content}\n\n"
-        episode_text += "---\n\n"
-        
-        ep_words = len(content.split())
-        ep_bytes = len(episode_text.encode('utf-8'))
-        
-        # Check limits
-        if (current_word_count + ep_words > MAX_WORDS) or (current_byte_count + ep_bytes > MAX_BYTES):
-            output_filename = os.path.join(OUTPUT_BASE, f"{prefix}_Transcripts_{chunk_start_ep}-{chunk_end_ep}.md")
-            with open(output_filename, 'w', encoding='utf-8') as out:
-                out.writelines(current_chunk_content)
-            print(f"Written {os.path.basename(output_filename)} (Words: {current_word_count})")
+            if chunk_start_ep is None:
+                chunk_start_ep = ep_num
+                
+            episode_text = f"# Episode: {title}\n**Date:** {date_str}\n\n{content}\n\n"
+            episode_text += "---\n\n"
             
-            # Reset
-            current_chunk_content = []
-            current_word_count = 0
-            current_byte_count = 0
-            chunk_start_ep = ep_num
+            ep_words = len(content.split())
+            ep_bytes = len(episode_text.encode('utf-8'))
             
-        current_chunk_content.append(episode_text)
-        current_word_count += ep_words
-        current_byte_count += ep_bytes
-        chunk_end_ep = ep_num
+            # Check limits
+            if (current_word_count + ep_words > MAX_WORDS) or (current_byte_count + ep_bytes > MAX_BYTES):
+                output_filename = os.path.join(OUTPUT_BASE, f"{prefix}_Transcripts_{chunk_start_ep}-{chunk_end_ep}.md")
+                with open(output_filename, 'w', encoding='utf-8') as out:
+                    out.writelines(current_chunk_content)
+                print(f"Written {os.path.basename(output_filename)} (Words: {current_word_count})")
+                
+                # Reset
+                current_chunk_content = []
+                current_word_count = 0
+                current_byte_count = 0
+                chunk_start_ep = ep_num
+                
+            current_chunk_content.append(episode_text)
+            current_word_count += ep_words
+            current_byte_count += ep_bytes
+            chunk_end_ep = ep_num
+            
+        except Exception as e:
+            print(f"Error processing file {filepath}: {e}. Skipping.")
+            continue
         
     # Write final chunk
     if current_chunk_content:
