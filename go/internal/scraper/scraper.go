@@ -100,8 +100,14 @@ func ExtractItems(html string) []Item {
 	var items []Item
 	for _, match := range matches {
 		if len(match) >= 3 {
+			url := match[1]
+			// Security: Ensure strict relative path
+			if !strings.HasPrefix(url, "/") {
+				continue
+			}
+			
 			items = append(items, Item{
-				URL:   match[1],
+				URL:   url,
 				Title: strings.TrimSpace(match[2]),
 			})
 		}

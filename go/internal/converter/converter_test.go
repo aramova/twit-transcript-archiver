@@ -14,7 +14,7 @@ func TestHTMLToMarkdown(t *testing.T) {
 	}{
 		{"<p>Hello <b>World</b></p>", "Hello **World**"},
 		{"<h1>Title</h1>", "# Title"},
-		{"<a href='link'>text</a>", "[text](link)"},
+		{"<a href='/link'>text</a>", "[text](/link)"},
 		{"<ul><li>A</li><li>B</li></ul>", "* A\n* B"},
 		{"<script>bad</script>Good", "Good"},
 	}

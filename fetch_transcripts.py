@@ -105,6 +105,11 @@ def extract_items(html):
     items = []
     matches = item_pattern.findall(html)
     for href, title in matches:
+        # Security: Ensure strict relative path to prevent SSRF/Open Redirects
+        if not href.startswith('/'):
+            # print(f"Warning: Skipping non-relative URL: {href}")
+            continue
+            
         items.append({
             'url': href,
             'title': title.strip()

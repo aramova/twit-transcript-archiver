@@ -61,7 +61,20 @@ func HTMLToMarkdown(html string) string {
 	
 	// Links
 	reLink := regexp.MustCompile(`(?s)<a\s+(?:[^>]*?\s+)?href=["']([^"]*)["'][^>]*>(.*?)</a>`)
-	text = reLink.ReplaceAllString(text, "[$2]($1)")
+	text = reLink.ReplaceAllStringFunc(text, func(match string) string {
+		sub := reLink.FindStringSubmatch(match)
+		if len(sub) < 3 {
+			return "" // Should not happen given the match
+		}
+		url := sub[1]
+		content := sub[2]
+		
+		// Security: Only allow http(s) or relative paths
+		if strings.HasPrefix(url, "/") || strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
+			return fmt.Sprintf("[%s](%s)", content, url)
+		}
+		return content
+	})
 	
 	// Lists
 	reUl := regexp.MustCompile(`(?i)<ul[^>]*>`) // Note: No need to escape / in Go raw strings

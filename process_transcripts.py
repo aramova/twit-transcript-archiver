@@ -21,7 +21,17 @@ def html_to_markdown(html_content):
     text = re.sub(r'<br\s*/?>', '\n', text)
     text = re.sub(r'<(b|strong)[^>]*>(.*?)</\1>', r'**\2**', text, flags=re.DOTALL)
     text = re.sub(r'<(i|em)[^>]*>(.*?)</\1>', r'*\2*', text, flags=re.DOTALL)
-    text = re.sub(r'<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)</a>', r'[\2](\1)', text, flags=re.DOTALL)
+    # 7. Convert Links (Sanitized)
+    # [text](url)
+    def sanitize_link(match):
+        url = match.group(1)
+        content = match.group(2)
+        # Security: Only allow http(s) or relative paths to prevent javascript: XSS
+        if url.startswith('/') or url.startswith('http://') or url.startswith('https://'):
+            return f"[{content}]({url})"
+        return content # Drop the link, keep the text
+
+    text = re.sub(r'<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)</a>', sanitize_link, text, flags=re.DOTALL)
     text = re.sub(r'<ul[^>]*>', '', text)
     text = re.sub(r'</ul>', '\n', text)
     text = re.sub(r'<li[^>]*>(.*?)</li>', r'* \1\n', text, flags=re.DOTALL)
