@@ -57,14 +57,15 @@ The output files will be saved in the `data/` directory with names like `IM_Tran
 ## Directory Structure
 
 *   `data/`: Stores all downloaded HTML files and generated Markdown files.
-*   `fetch_transcripts.py`: The scraper script.
-*   `process_transcripts.py`: The converter/chunker script.
+*   `fetch_transcripts.py`: The Python scraper script.
+*   `process_transcripts.py`: The Python converter/chunker script.
+*   `go/`: The Go implementation source tree.
 
 ## Logic Flow
 
 ```mermaid
 graph TD
-    A[Start] --> B{Run fetch_transcripts.py}
+    A[Start] --> B{Run fetcher (Py/Go)}
     B --> C[Scan TWiT.tv List Pages]
     C --> D{Found Episode?}
     D -- Yes --> E{Match Target Show?}
@@ -74,7 +75,7 @@ graph TD
     E -- No --> H
     D -- No --> I[Next Page / Finish]
     
-    J[Start Processing] --> K{Run process_transcripts.py}
+    J[Start Processing] --> K{Run processor (Py/Go)}
     K --> L[Scan data/ for *.html]
     L --> M[Group by Show Prefix]
     M --> N[Convert HTML to Markdown]
@@ -92,7 +93,7 @@ graph TD
 [ INTERNET ] 
       |
       v
-(fetch_transcripts.py)
+(fetcher)
       |
       | 1. Scrapes List Pages (transcripts_page_N.html)
       | 2. Filters by Show (e.g., "IM", "TWIG")
@@ -102,7 +103,7 @@ graph TD
 [ ./data/ Directory ] <---- Stores raw HTML files
       |
       v
-(process_transcripts.py)
+(processor)
       |
       | 1. Reads HTML files
       | 2. Cleans & Converts to Markdown
@@ -112,19 +113,20 @@ graph TD
       v
 [ Output Files ]
       |-- IM_Transcripts_805-818.md
-      |-- IM_Transcripts_819-832.md
       |-- ...
       |
       v
 [ Google NotebookLM ]
 ```
 
-## Requirements
+## Python Implementation
+
+### Requirements
 
 *   Python 3.x
 *   Standard libraries only (`urllib`, `re`, `argparse`, `glob`). No `pip install` required.
 
-## Development & Testing
+### Development & Testing
 
 This project includes a comprehensive unit test suite using the standard `unittest` library.
 
@@ -139,3 +141,40 @@ Tests cover:
 *   HTML parsing and regex logic.
 *   Markdown conversion and cleaning.
 *   Robustness and error handling.
+
+## Go Implementation
+
+The project also includes a full Go implementation located in the `go/` directory.
+
+### Requirements
+
+*   Go 1.16+
+
+### Usage
+
+**Fetch Transcripts:**
+
+```bash
+cd go
+go run cmd/fetch-transcripts/main.go --all
+# OR specific shows
+go run cmd/fetch-transcripts/main.go --shows SN WW
+```
+
+**Process Transcripts:**
+
+```bash
+cd go
+go run cmd/process-transcripts/main.go --all
+```
+
+### Testing
+
+The Go implementation includes a test suite covering scraping, conversion, and utility logic.
+
+**To run the tests:**
+
+```bash
+cd go
+go test ./...
+```
