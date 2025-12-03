@@ -1,3 +1,3 @@
 module github.com/aramova/twit-transcript-archiver/go
 
-go 1.22.5
+go 1.19

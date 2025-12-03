@@ -73,14 +73,30 @@ dataDir := config.GetDataDir()
 	}
 	fmt.Printf("Targeting Shows: %v\n", shows)
 
+	stats := struct {
+		PagesScanned        int
+		PagesDownloaded     int
+		PagesCached         int
+		TranscriptsFound    int
+		TranscriptsDownloaded int
+		TranscriptsSkipped  int
+		TranscriptsIgnored  int
+	}{}
+
 	// Main Loop
 	for pageNum := 1; pageNum <= *pagesPtr; pageNum++ {
+		stats.PagesScanned++
 		fmt.Printf("--- Processing Page %d ---\n", pageNum)
 		
-		html, err := scraper.GetListPage(pageNum, dataDir, *refreshPtr)
+		html, cached, err := scraper.GetListPageWithCacheStatus(pageNum, dataDir, *refreshPtr)
 		if err != nil {
 			fmt.Printf("Failed to get content for page %d: %v. Stopping.\n", pageNum, err)
 			break
+		}
+		if cached {
+			stats.PagesCached++
+		} else {
+			stats.PagesDownloaded++
 		}
 		
 		items := scraper.ExtractItems(html)
@@ -92,6 +108,7 @@ dataDir := config.GetDataDir()
 		fmt.Printf("Found %d items on page %d.\n", len(items), pageNum)
 		
 		for _, item := range items {
+			stats.TranscriptsFound++
 			titleLower := strings.ToLower(item.Title)
 			var matchedPrefix string
 			
@@ -104,14 +121,33 @@ dataDir := config.GetDataDir()
 		
 			if matchedPrefix != "" {
 				if targetPrefixes[matchedPrefix] {
-					err := scraper.DownloadTranscript(item.URL, item.Title, matchedPrefix, dataDir)
+					skipped, err := scraper.DownloadTranscriptWithStatus(item.URL, item.Title, matchedPrefix, dataDir)
 					if err != nil {
 						fmt.Printf("Error downloading %s: %v\n", item.Title, err)
+					} else if skipped {
+						stats.TranscriptsSkipped++
+					} else {
+						stats.TranscriptsDownloaded++
 					}
 				} else {
 					// fmt.Printf("  [IGNORE] %s\n", item.Title)
+					stats.TranscriptsIgnored++
 				}
+			} else {
+				stats.TranscriptsIgnored++
 			}
 		}
 	}
+
+	fmt.Println("\n========================================")
+	fmt.Println("           CRAWL SUMMARY")
+	fmt.Println("========================================")
+	fmt.Printf("Pages Scanned:       %d\n", stats.PagesScanned)
+	fmt.Printf("  - Downloaded:      %d\n", stats.PagesDownloaded)
+	fmt.Printf("  - Cached:          %d\n", stats.PagesCached)
+	fmt.Printf("Transcripts Found:   %d\n", stats.TranscriptsFound)
+	fmt.Printf("  - Downloaded:      %d\n", stats.TranscriptsDownloaded)
+	fmt.Printf("  - Skipped (Exist): %d\n", stats.TranscriptsSkipped)
+	fmt.Printf("  - Ignored (Type):  %d\n", stats.TranscriptsIgnored)
+	fmt.Println("========================================")
 }

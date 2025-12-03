@@ -50,8 +50,9 @@ func DownloadPage(url string) (string, error) {
 	return "", fmt.Errorf("failed after retries: %v", lastErr)
 }
 
-// GetListPage retrieves the list page content, using cache if appropriate
-func GetListPage(pageNum int, dataDir string, forceRefresh bool) (string, error) {
+// GetListPageWithCacheStatus retrieves the list page content, using cache if appropriate
+// Returns content, isCached, error
+func GetListPageWithCacheStatus(pageNum int, dataDir string, forceRefresh bool) (string, bool, error) {
 	filename := filepath.Join(dataDir, fmt.Sprintf("transcripts_page_%d.html", pageNum))
 	
 	shouldDownload := true
@@ -62,8 +63,6 @@ func GetListPage(pageNum int, dataDir string, forceRefresh bool) (string, error)
 				shouldDownload = false
 			} else {
 				// Recent pages (1-5) are re-downloaded to check for updates
-				// In a real app we might check file age, but here we mimic the python script
-				// which says "exists locally but is recent. Re-downloading"
 				shouldDownload = true
 			}
 		}
@@ -72,7 +71,7 @@ func GetListPage(pageNum int, dataDir string, forceRefresh bool) (string, error)
 	if !shouldDownload {
 		content, err := os.ReadFile(filename)
 		if err == nil {
-			return string(content), nil
+			return string(content), true, nil
 		}
 	}
 	
@@ -84,10 +83,16 @@ func GetListPage(pageNum int, dataDir string, forceRefresh bool) (string, error)
 	fmt.Printf("Downloading list page %d: %s\n", pageNum, url)
 	content, err := DownloadPage(url)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	
 	err = os.WriteFile(filename, []byte(content), 0644)
+	return content, false, err
+}
+
+// Wrapper for backward compatibility if needed, though we updated main.go
+func GetListPage(pageNum int, dataDir string, forceRefresh bool) (string, error) {
+	content, _, err := GetListPageWithCacheStatus(pageNum, dataDir, forceRefresh)
 	return content, err
 }
 
@@ -115,8 +120,9 @@ func ExtractItems(html string) []Item {
 	return items
 }
 
-// DownloadTranscript downloads a specific transcript
-func DownloadTranscript(urlPath, title, prefix, dataDir string) error {
+// DownloadTranscriptWithStatus downloads a specific transcript
+// Returns skipped (bool) and error
+func DownloadTranscriptWithStatus(urlPath, title, prefix, dataDir string) (bool, error) {
 	// Extract episode number
 	re := regexp.MustCompile(`(\d+)`)
 	matches := re.FindStringSubmatch(title)
@@ -128,7 +134,7 @@ func DownloadTranscript(urlPath, title, prefix, dataDir string) error {
 	filename := filepath.Join(dataDir, fmt.Sprintf("%s_%s.html", prefix, epNum))
 	
 	if utils.FileExists(filename) {
-		return nil // Skip
+		return true, nil // Skipped
 	}
 	
 	fullURL := config.BaseSiteURL + urlPath
@@ -136,8 +142,14 @@ func DownloadTranscript(urlPath, title, prefix, dataDir string) error {
 	
 	content, err := DownloadPage(fullURL)
 	if err != nil {
-		return err
+		return false, err
 	}
 	
-	return os.WriteFile(filename, []byte(content), 0644)
+	return false, os.WriteFile(filename, []byte(content), 0644)
+}
+
+// Wrapper
+func DownloadTranscript(urlPath, title, prefix, dataDir string) error {
+	_, err := DownloadTranscriptWithStatus(urlPath, title, prefix, dataDir)
+	return err
 }
