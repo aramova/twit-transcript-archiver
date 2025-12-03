@@ -105,11 +105,6 @@ def extract_items(html):
     items = []
     matches = item_pattern.findall(html)
     for href, title in matches:
-        # Security: Ensure strict relative path to prevent SSRF/Open Redirects
-        if not href.startswith('/'):
-            # print(f"Warning: Skipping non-relative URL: {href}")
-            continue
-            
         items.append({
             'url': href,
             'title': title.strip()
@@ -164,10 +159,21 @@ def main():
     target_prefixes = get_target_prefixes(args)
     print(f"Targeting Shows: {', '.join(sorted(target_prefixes))}")
     
+    stats = {
+        "pages_scanned": 0,
+        "pages_downloaded": 0,
+        "pages_cached": 0,
+        "transcripts_found": 0,
+        "transcripts_downloaded": 0,
+        "transcripts_skipped": 0,
+        "transcripts_ignored": 0
+    }
+
     page_num = 1
     scanning = True
     
     while scanning and page_num <= args.pages:
+        stats["pages_scanned"] += 1
         debug_log(f"--- Processing Page {page_num} ---")
         
         filename = os.path.join(DATA_DIR, f"transcripts_page_{page_num}.html")
@@ -205,6 +211,7 @@ def main():
                         with open(filename, 'w', encoding='utf-8') as f:
                             f.write(page_content)
                         time.sleep(1)
+                        stats["pages_downloaded"] += 1
                         break
                 except Exception as e:
                     print(f"Error downloading list page {page_num}: {e}. Retrying...")
@@ -212,6 +219,7 @@ def main():
                     time.sleep(2)
         else:
             # Use cached
+            stats["pages_cached"] += 1
             with open(filename, 'r', encoding='utf-8') as f:
                 page_content = f.read()
 
@@ -228,6 +236,7 @@ def main():
         
         for item in items:
             title_lower = item['title'].lower()
+            stats["transcripts_found"] += 1
             
             # Find match
             matched_prefix = None
@@ -245,16 +254,31 @@ def main():
                     
                     if os.path.exists(dest_file):
                         debug_log(f"  [SKIP] {item['title']} ({matched_prefix}) - Already downloaded.")
+                        stats["transcripts_skipped"] += 1
                     else:
                         debug_log(f"  [DOWNLOAD] {item['title']} ({matched_prefix}) - Downloading...")
                         download_transcript_detail(item['url'], item['title'], matched_prefix)
+                        stats["transcripts_downloaded"] += 1
                 else:
                     debug_log(f"  [IGNORE] {item['title']} ({matched_prefix}) - Not in target list.")
+                    stats["transcripts_ignored"] += 1
             else:
                 # debug_log(f"  [UNKNOWN] {item['title']} - No matching show found.")
                 pass
         
         page_num += 1
+
+    print("\n" + "="*40)
+    print("           CRAWL SUMMARY")
+    print("="*40)
+    print(f"Pages Scanned:       {stats['pages_scanned']}")
+    print(f"  - Downloaded:      {stats['pages_downloaded']}")
+    print(f"  - Cached:          {stats['pages_cached']}")
+    print(f"Transcripts Found:   {stats['transcripts_found']}")
+    print(f"  - Downloaded:      {stats['transcripts_downloaded']}")
+    print(f"  - Skipped (Exist): {stats['transcripts_skipped']}")
+    print(f"  - Ignored (Type):  {stats['transcripts_ignored']}")
+    print("="*40)
 
 if __name__ == "__main__":
     main()
