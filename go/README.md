@@ -33,22 +33,33 @@ This directory contains the high-performance Go implementation of the TWiT Trans
     go mod tidy
     ```
 
+## Build
+
+To compile the binaries for production use:
+
+```bash
+# Build the fetcher binary
+go build -o fetch-transcripts cmd/fetch-transcripts/main.go
+
+# Build the processor binary
+go build -o process-transcripts cmd/process-transcripts/main.go
+```
+
 ## Usage
 
 ### Fetch Transcripts
 
-To run the fetcher directly:
+Once built, you can run the `fetch-transcripts` binary directly:
 
 ```bash
 # Download default shows (IM, TWIG)
-go run cmd/fetch-transcripts/main.go
+./fetch-transcripts
 
 # Download ALL supported shows
-go run cmd/fetch-transcripts/main.go --all
+./fetch-transcripts --all
 
 # Download specific shows (by name or code)
-# Note: Go flag parsing separates args from flags. Put flags first.
-go run cmd/fetch-transcripts/main.go --shows "Security Now" "Windows Weekly"
+./fetch-transcripts --shows "Security Now" "Windows Weekly"
 ```
 
 **Flags:**
@@ -61,7 +72,7 @@ go run cmd/fetch-transcripts/main.go --shows "Security Now" "Windows Weekly"
 
 (If implemented)
 ```bash
-go run cmd/process-transcripts/main.go
+./process-transcripts
 ```
 
 ## Key Functions
