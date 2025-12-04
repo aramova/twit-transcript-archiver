@@ -70,10 +70,16 @@ Once built, you can run the `fetch-transcripts` binary directly:
 
 ### Process Transcripts
 
-(If implemented)
+To convert the downloaded HTML files into combined Markdown files:
+
 ```bash
 ./process-transcripts
 ```
+
+**Options:**
+
+*   `--all`: Process all show prefixes found in the data directory.
+*   Arguments: Specify distinct show prefixes (e.g., `./process-transcripts SN WW`) to process only those shows.
 
 ## Key Functions
 
