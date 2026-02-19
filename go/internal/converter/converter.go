@@ -199,15 +199,25 @@ func HTMLToMarkdown(html string, epNum int, dateYMD string) string {
 			speaker = strings.TrimSpace(matches[1])
 			timestamp = strings.TrimSpace(matches[2])
 			restOfLine = strings.TrimSpace(matches[3])
+			// Cleanup colon if it lingered in restOfLine
+			if strings.HasPrefix(restOfLine, ":") {
+				restOfLine = strings.TrimSpace(restOfLine[1:])
+			}
 			matched = true
 		} else if matches := tsPattern3.FindStringSubmatch(line); len(matches) > 3 { // Pattern 3: Speaker (HH:MM:SS):
 			speaker = strings.TrimSpace(matches[1])
 			timestamp = strings.TrimSpace(matches[2])
 			restOfLine = strings.TrimSpace(matches[3])
+			if strings.HasPrefix(restOfLine, ":") {
+				restOfLine = strings.TrimSpace(restOfLine[1:])
+			}
 			matched = true
 		} else if matches := tsPattern4.FindStringSubmatch(line); len(matches) > 2 { // Pattern 4: (HH:MM:SS):
 			timestamp = strings.TrimSpace(matches[1])
 			restOfLine = strings.TrimSpace(matches[2])
+			if strings.HasPrefix(restOfLine, ":") {
+				restOfLine = strings.TrimSpace(restOfLine[1:])
+			}
 			speaker = ""
 			matched = true
 		}
@@ -218,17 +228,23 @@ func HTMLToMarkdown(html string, epNum int, dateYMD string) string {
 				prefix = fmt.Sprintf("EP:%d Date:%s TS:%s - %s", epNum, dateYMD, timestamp, speaker)
 			}
 
-			if restOfLine != "" {
-				finalLines = append(finalLines, fmt.Sprintf("%s %s", prefix, restOfLine))
-			} else if i+1 < len(rawLines) {
+			// Merge current restOfLine and potentially the next line if it's not a timestamp
+			mergedText := restOfLine
+			if i+1 < len(rawLines) {
 				nextLine := strings.TrimSpace(rawLines[i+1])
 				isNextTS := genericTSMatch.MatchString(nextLine)
 				if nextLine != "" && !isNextTS {
-					finalLines = append(finalLines, fmt.Sprintf("%s %s", prefix, nextLine))
+					if mergedText != "" {
+						mergedText += " " + nextLine
+					} else {
+						mergedText = nextLine
+					}
 					i++ // Consume next line
-				} else {
-					finalLines = append(finalLines, prefix)
 				}
+			}
+
+			if mergedText != "" {
+				finalLines = append(finalLines, fmt.Sprintf("%s %s", prefix, mergedText))
 			} else {
 				finalLines = append(finalLines, prefix)
 			}
