@@ -78,12 +78,12 @@ go build -o process-transcripts ./cmd/process-transcripts
 
 ```bash
 # Fetch
-./fetch-transcripts -shows IM TWIG
-./fetch-transcripts -all
+./fetch-transcripts IM TWIG
+./fetch-transcripts --all
 
 # Process
-./process-transcripts -prefixes IM -by-year
-./process-transcripts -all
+./process-transcripts --by-year IM
+./process-transcripts --all
 ```
 
 ## Testing

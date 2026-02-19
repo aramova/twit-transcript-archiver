@@ -58,8 +58,8 @@ Once built, you can run the `fetch-transcripts` binary directly:
 # Download ALL supported shows
 ./fetch-transcripts --all
 
-# Download specific shows (by name or code)
-./fetch-transcripts --shows "Security Now" "Windows Weekly"
+# Download specific shows (by name or code) as positional arguments
+./fetch-transcripts "Security Now" "Windows Weekly"
 ```
 
 **Flags:**
@@ -67,19 +67,28 @@ Once built, you can run the `fetch-transcripts` binary directly:
 *   `--all`: Download transcripts for all known shows defined in `internal/config`.
 *   `--pages N`: Number of index pages to scan (default: 200).
 *   `--refresh-list`: Force re-download of index pages, ignoring the cache.
+*   *Positional Arguments*: Show codes (e.g., IM, TWIG) or full show names (e.g., "Security Now", "Windows Weekly") to download transcripts for. If no positional arguments are provided and `--all` is not used, defaults to IM and TWIG.
 
 ### Process Transcripts
 
 To convert the downloaded HTML files into combined Markdown files:
 
 ```bash
+# Process default shows (IM, TWIG)
 ./process-transcripts
+
+# Process ALL downloaded shows, splitting by year
+./process-transcripts --all --by-year
+
+# Process specific show codes (e.g., IM, TWIG), splitting by year
+./process-transcripts --by-year IM TWIG
 ```
 
-**Options:**
+**Flags:**
 
 *   `--all`: Process all show prefixes found in the data directory.
-*   Arguments: Specify distinct show prefixes (e.g., `./process-transcripts SN WW`) to process only those shows.
+*   `--by-year`: Break output files up by year as well as size limits.
+*   *Positional Arguments*: Show prefixes (e.g., IM, TWIG) to process. If no positional arguments are provided and `--all` is not used, defaults to IM and TWIG.
 
 ## Key Functions
 
