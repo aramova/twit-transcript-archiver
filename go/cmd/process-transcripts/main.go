@@ -13,17 +13,18 @@ import (
 
 func main() {
 	allPtr := flag.Bool("all", false, "Process ALL prefixes found in data directory")
+	byYearPtr := flag.Bool("by-year", false, "Break files up by year as well as size limits")
 	// prefixes via args
 	
 	flag.Parse()
 	
-dataDir := config.GetDataDir()
+	dataDir := config.GetDataDir()
 	
 	prefixesToProcess := make(map[string]bool)
 	
 	if *allPtr {
 		files, _ := filepath.Glob(filepath.Join(dataDir, "*_*.html"))
-		re := regexp.MustCompile(`([A-Z]+)_\d+\.html`)
+		re := regexp.MustCompile(`([A-Z0-9]+)_\d+\.html`)
 		for _, f := range files {
 			base := filepath.Base(f)
 			matches := re.FindStringSubmatch(base)
@@ -45,7 +46,7 @@ dataDir := config.GetDataDir()
 	}
 	
 	for prefix := range prefixesToProcess {
-		if err := converter.ProcessPrefix(prefix, dataDir, dataDir); err != nil {
+		if err := converter.ProcessPrefix(prefix, dataDir, dataDir, *byYearPtr); err != nil {
 			fmt.Printf("Error processing prefix %s: %v\n", prefix, err)
 		}
 	}

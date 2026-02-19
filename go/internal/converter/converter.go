@@ -12,9 +12,24 @@ import (
 
 // Constants
 const (
-	MaxWords = 450000
-	MaxBytes = 180 * 1024 * 1024
+	// NotebookLM Limits (as of early 2026)
+	// Word Limit: 500,000 words per source
+	// File Size Limit: 200MB per file
+	// We use slightly lower operational limits to ensure compatibility.
+	MaxWords = 490000
+	MaxBytes = 190 * 1024 * 1024
 )
+
+// extractYear pulls a 4-digit year from a date string
+func extractYear(dateStr string) int {
+	re := regexp.MustCompile(`(\d{4})`)
+	matches := re.FindStringSubmatch(dateStr)
+	if len(matches) > 1 {
+		val, _ := strconv.Atoi(matches[1])
+		return val
+	}
+	return 0
+}
 
 // HTMLToMarkdown converts raw HTML transcript content to Markdown
 func HTMLToMarkdown(html string) string {
@@ -113,11 +128,11 @@ func HTMLToMarkdown(html string) string {
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
-// ParseTranscriptFile extracts title, date, and body from a file
-func ParseTranscriptFile(path string) (string, string, string, error) {
+// ParseTranscriptFile extracts title, date, year and body from a file
+func ParseTranscriptFile(path string) (string, string, int, string, error) {
 	contentBytes, err := os.ReadFile(path)
 	if err != nil {
-		return "", "", "", err
+		return "", "", 0, "", err
 	}
 	html := string(contentBytes)
 	
@@ -136,13 +151,14 @@ func ParseTranscriptFile(path string) (string, string, string, error) {
 		// normalize whitespace
 		dateStr = strings.Join(strings.Fields(dateStr), " ")
 	}
+	year := extractYear(dateStr)
 	
 	rawBody := ""
 	if matches := reBody.FindStringSubmatch(html); len(matches) > 1 {
 		rawBody = matches[1]
 	}
 	
-	return title, dateStr, HTMLToMarkdown(rawBody), nil
+	return title, dateStr, year, HTMLToMarkdown(rawBody), nil
 }
 
 func GetEpNum(filename string) int {
@@ -155,7 +171,7 @@ func GetEpNum(filename string) int {
 	return 0
 }
 
-func ProcessPrefix(prefix, dataDir, outputBase string) error {
+func ProcessPrefix(prefix, dataDir, outputBase string, byYear bool) error {
 	files, err := filepath.Glob(filepath.Join(dataDir, fmt.Sprintf("%s_*.html", prefix)))
 	if err != nil {
 		return err
@@ -171,40 +187,49 @@ func ProcessPrefix(prefix, dataDir, outputBase string) error {
 		return GetEpNum(files[i]) < GetEpNum(files[j])
 	})
 	
-	fmt.Printf("Processing %d files for %s...\n", len(files), prefix)
+	fmt.Printf("Processing %d files for %s (By Year: %v)...\n", len(files), prefix, byYear)
 	
 	currentWordCount := 0
 	currentByteCount := 0
 	var currentChunk []string
 	var chunkStartEp, chunkEndEp int
+	currentChunkYear := -1
 	firstInChunk := true
 	
 	for _, fpath := range files {
 		epNum := GetEpNum(fpath)
-		title, dateStr, content, err := ParseTranscriptFile(fpath)
+		title, dateStr, epYear, content, err := ParseTranscriptFile(fpath)
 		if err != nil {
 			fmt.Printf("Error processing %s: %v. Skipping.\n", fpath, err)
 			continue
 		}
 		
-		if firstInChunk {
-			chunkStartEp = epNum
-			firstInChunk = false
-		}
-		
 		epText := fmt.Sprintf("# Episode: %s\n**Date:** %s\n\n%s\n\n---\n\n", title, dateStr, content)
-		
 		epWords := len(strings.Fields(content))
 		epBytes := len([]byte(epText))
-		
+
+		// Check if we need to split the chunk
+		splitNeeded := false
 		if (currentWordCount+epWords > MaxWords) || (currentByteCount+epBytes > MaxBytes) {
-			writeChunk(outputBase, prefix, chunkStartEp, chunkEndEp, currentChunk)
+			splitNeeded = true
+		} else if byYear && currentChunkYear != -1 && epYear != currentChunkYear {
+			splitNeeded = true
+		}
+
+		if splitNeeded && !firstInChunk {
+			writeChunk(outputBase, prefix, chunkStartEp, chunkEndEp, currentChunkYear, currentChunk, byYear)
 			
 			// Reset
 			currentChunk = []string{}
 			currentWordCount = 0
 			currentByteCount = 0
+			firstInChunk = true
+		}
+		
+		if firstInChunk {
 			chunkStartEp = epNum
+			currentChunkYear = epYear
+			firstInChunk = false
 		}
 		
 		currentChunk = append(currentChunk, epText)
@@ -214,14 +239,20 @@ func ProcessPrefix(prefix, dataDir, outputBase string) error {
 	}
 	
 	if len(currentChunk) > 0 {
-		writeChunk(outputBase, prefix, chunkStartEp, chunkEndEp, currentChunk)
+		writeChunk(outputBase, prefix, chunkStartEp, chunkEndEp, currentChunkYear, currentChunk, byYear)
 	}
 	
 	return nil
 }
 
-func writeChunk(base, prefix string, start, end int, content []string) {
-	filename := filepath.Join(base, fmt.Sprintf("%s_Transcripts_%d-%d.md", prefix, start, end))
+func writeChunk(base, prefix string, start, end, year int, content []string, byYear bool) {
+	var filename string
+	if byYear && year > 0 {
+		filename = filepath.Join(base, fmt.Sprintf("%s_Transcripts_%d_%d_%d.md", prefix, year, start, end))
+	} else {
+		filename = filepath.Join(base, fmt.Sprintf("%s_Transcripts_%d-%d.md", prefix, start, end))
+	}
+	
 	f, err := os.Create(filename)
 	if err != nil {
 		fmt.Printf("Error creating %s: %v\n", filename, err)
@@ -231,5 +262,5 @@ func writeChunk(base, prefix string, start, end int, content []string) {
 	
 	fullText := strings.Join(content, "")
 	f.WriteString(fullText)
-	fmt.Printf("Written %s (Words: approx %d)\n", filename, len(strings.Fields(fullText)))
+	fmt.Printf("Written %s (Words: approx %d, Bytes: %d)\n", filename, len(strings.Fields(fullText)), len([]byte(fullText)))
 }

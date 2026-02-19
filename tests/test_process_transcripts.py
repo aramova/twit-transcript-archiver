@@ -51,6 +51,11 @@ class TestProcessTranscripts(unittest.TestCase):
         self.assertIn("* Item 1", md)
         self.assertIn("Para 2", md)
 
+    def test_extract_year(self):
+        self.assertEqual(process_transcripts.extract_year("Jan 1st 2025"), 2025)
+        self.assertEqual(process_transcripts.extract_year("Wednesday, Feb 18, 2026"), 2026)
+        self.assertEqual(process_transcripts.extract_year("No year here"), 0)
+
     @patch("builtins.open", new_callable=mock_open, read_data="""
     <html>
         <h1 class="post-title">Show 100</h1>
@@ -59,17 +64,19 @@ class TestProcessTranscripts(unittest.TestCase):
     </html>
     """)
     def test_parse_transcript_file(self, mock_file):
-        title, date_str, content = process_transcripts.parse_transcript_file("dummy_path")
+        title, date_str, year, content = process_transcripts.parse_transcript_file("dummy_path")
         self.assertEqual(title, "Show 100")
         self.assertEqual(date_str, "Jan 1st 2025")
+        self.assertEqual(year, 2025)
         self.assertIn("Transcript content.", content)
 
     @patch("builtins.open", new_callable=mock_open, read_data="<bad_html>")
     def test_parse_transcript_file_malformed(self, mock_file):
         # Should gracefully handle missing tags and return empty/defaults
-        title, date_str, content = process_transcripts.parse_transcript_file("dummy")
+        title, date_str, year, content = process_transcripts.parse_transcript_file("dummy")
         self.assertEqual(title, "Unknown Episode")
         self.assertEqual(date_str, "Unknown Date")
+        self.assertEqual(year, 0)
         self.assertEqual(content, "")
 
     def test_get_ep_num(self):
@@ -84,7 +91,7 @@ class TestProcessTranscripts(unittest.TestCase):
         mock_glob.return_value = ["good.html", "bad.html"]
         
         mock_parse.side_effect = [
-            ("Good Title", "Date", "Content"),
+            ("Good Title", "Date", 2025, "Content"),
             OSError("Permission denied")
         ]
         
@@ -101,8 +108,8 @@ class TestProcessTranscripts(unittest.TestCase):
         # Setup
         mock_glob.return_value = ["IM_1.html", "IM_2.html"]
         mock_parse.side_effect = [
-            ("Ep 1", "Date 1", "Content 1"),
-            ("Ep 2", "Date 2", "Content 2")
+            ("Ep 1", "Date 1", 2025, "Content 1"),
+            ("Ep 2", "Date 2", 2025, "Content 2")
         ]
         
         # Execute
