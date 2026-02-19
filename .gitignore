@@ -3,3 +3,15 @@ data/*.md
 __pycache__/
 *.pyc
 .DS_Store
+
+# Go
+go/bin/
+*.exe
+
+# IDE
+.vscode/
+
+# Virtual Env
+.venv/
+venv/
+env/
