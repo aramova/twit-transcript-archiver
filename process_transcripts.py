@@ -14,28 +14,54 @@ OUTPUT_BASE = DATA_DIR # Save outputs in the same data folder
 MAX_WORDS = 490000
 MAX_BYTES = 190 * 1024 * 1024 # 190 MB
 
+# Pre-compiled Regular Expressions for performance
+YEAR_RE = re.compile(r'(\d{4})')
+EP_NUM_RE = re.compile(r'_(\d+)\.html')
+PREFIX_RE = re.compile(r'([A-Z0-9]+)_\d+\.html')
+
+# Regexes for HTML parsing
+SCRIPT_STYLE_RE = re.compile(r'<(script|style).*?</\1>', re.DOTALL)
+H1_RE = re.compile(r'<h1[^>]*>(.*?)</h1>', re.DOTALL)
+H2_RE = re.compile(r'<h2[^>]*>(.*?)</h2>', re.DOTALL)
+H3_RE = re.compile(r'<h3[^>]*>(.*?)</h3>', re.DOTALL)
+P_RE = re.compile(r'<p[^>]*>(.*?)</p>', re.DOTALL)
+BR_RE = re.compile(r'<br\s*/?>')
+BOLD_RE = re.compile(r'<(b|strong)[^>]*>(.*?)</\1>', re.DOTALL)
+ITALIC_RE = re.compile(r'<(i|em)[^>]*>(.*?)</\1>', re.DOTALL)
+A_RE = re.compile(r'<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)</a>', re.DOTALL)
+UL_RE = re.compile(r'<ul[^>]*>')
+UL_END_RE = re.compile(r'</ul>')
+LI_RE = re.compile(r'<li[^>]*>(.*?)</li>', re.DOTALL)
+TAG_RE = re.compile(r'<[^>]+>')
+WHITESPACE_RE = re.compile(r'\s+')
+
+# Regexes for metadata parsing
+TITLE_RE = re.compile(r'<h1 class="post-title">(.*?)</h1>')
+BYLINE_RE = re.compile(r'<p class="byline">(.*?)</p>', re.DOTALL)
+CONTENT_RE = re.compile(r'<div class="body textual">(.*?)</div>', re.DOTALL)
+
+
 def extract_year(date_str):
     """
     Extracts a 4-digit year from a date string using regex.
     Common formats: 'Wednesday, February 18, 2026' or 'Jan 1st 2025'
     """
-    match = re.search(r'(\d{4})', date_str)
+    match = YEAR_RE.search(date_str)
     return int(match.group(1)) if match else 0
 
 def html_to_markdown(html_content):
     if not html_content:
         return ""
     
-    text = re.sub(r'<(script|style).*?</\1>', '', html_content, flags=re.DOTALL)
-    text = re.sub(r'<h1[^>]*>(.*?)</h1>', r'# \1\n\n', text, flags=re.DOTALL)
-    text = re.sub(r'<h2[^>]*>(.*?)</h2>', r'## \1\n\n', text, flags=re.DOTALL)
-    text = re.sub(r'<h3[^>]*>(.*?)</h3>', r'### \1\n\n', text, flags=re.DOTALL)
-    text = re.sub(r'<p[^>]*>(.*?)</p>', r'\1\n\n', text, flags=re.DOTALL)
-    text = re.sub(r'<br\s*/?>', '\n', text)
-    text = re.sub(r'<(b|strong)[^>]*>(.*?)</\1>', r'**\2**', text, flags=re.DOTALL)
-    text = re.sub(r'<(i|em)[^>]*>(.*?)</\1>', r'*\2*', text, flags=re.DOTALL)
-    # 7. Convert Links (Sanitized)
-    # [text](url)
+    text = SCRIPT_STYLE_RE.sub('', html_content)
+    text = H1_RE.sub(r'# \1\n\n', text)
+    text = H2_RE.sub(r'## \1\n\n', text)
+    text = H3_RE.sub(r'### \1\n\n', text)
+    text = P_RE.sub(r'\1\n\n', text)
+    text = BR_RE.sub('\n', text)
+    text = BOLD_RE.sub(r'**\2**', text)
+    text = ITALIC_RE.sub(r'*\2*', text)
+    
     def sanitize_link(match):
         url = match.group(1)
         content = match.group(2)
@@ -44,11 +70,11 @@ def html_to_markdown(html_content):
             return f"[{content}]({url})"
         return content # Drop the link, keep the text
 
-    text = re.sub(r'<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)</a>', sanitize_link, text, flags=re.DOTALL)
-    text = re.sub(r'<ul[^>]*>', '', text)
-    text = re.sub(r'</ul>', '\n', text)
-    text = re.sub(r'<li[^>]*>(.*?)</li>', r'* \1\n', text, flags=re.DOTALL)
-    text = re.sub(r'<[^>]+>', '', text)
+    text = A_RE.sub(sanitize_link, text)
+    text = UL_RE.sub('', text)
+    text = UL_END_RE.sub('\n', text)
+    text = LI_RE.sub(r'* \1\n', text)
+    text = TAG_RE.sub('', text)
     
     text = text.replace('&nbsp;', ' ')
     text = text.replace('&amp;', '&')
@@ -75,13 +101,13 @@ def parse_transcript_file(filepath):
     with open(filepath, 'r', encoding='utf-8') as f:
         html = f.read()
         
-    title_match = re.search(r'<h1 class="post-title">(.*?)</h1>', html)
-    date_match = re.search(r'<p class="byline">(.*?)</p>', html, re.DOTALL)
-    content_match = re.search(r'<div class="body textual">(.*?)</div>', html, re.DOTALL)
+    title_match = TITLE_RE.search(html)
+    date_match = BYLINE_RE.search(html)
+    content_match = CONTENT_RE.search(html)
     
     title = title_match.group(1).strip() if title_match else "Unknown Episode"
     date_str = date_match.group(1).strip() if date_match else "Unknown Date"
-    date_str = re.sub(r'\s+', ' ', date_str)
+    date_str = WHITESPACE_RE.sub(' ', date_str)
     year = extract_year(date_str)
     
     raw_content = content_match.group(1) if content_match else ""
@@ -91,7 +117,7 @@ def parse_transcript_file(filepath):
 
 def get_ep_num(fname):
     # Matches {PREFIX}_{NUM}.html
-    match = re.search(r'_(\d+)\.html', fname)
+    match = EP_NUM_RE.search(fname)
     return int(match.group(1)) if match else 0
 
 def process_prefix(prefix, by_year=False):
@@ -202,7 +228,7 @@ def main():
             basename = os.path.basename(f)
             # Assumption: Prefix is everything before the underscore and number
             # e.g. IM_847.html -> IM
-            match = re.match(r'([A-Z0-9]+)_\d+\.html', basename)
+            match = PREFIX_RE.match(basename)
             if match:
                 prefixes_to_process.add(match.group(1))
     elif args.prefixes:

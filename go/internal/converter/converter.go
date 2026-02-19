@@ -20,10 +20,39 @@ const (
 	MaxBytes = 190 * 1024 * 1024
 )
 
+// Pre-compiled regular expressions for performance
+var (
+	// General regexes
+	yearCaptureRegex    = regexp.MustCompile(`(\d{4})`)
+	episodeNumberRegex  = regexp.MustCompile(`_(\d+)\.html`)
+
+	// HTML parsing regexes
+	scriptTagRegex      = regexp.MustCompile(`(?s)<script.*?</script>`)
+	styleTagRegex       = regexp.MustCompile(`(?s)<style.*?</style>`)
+	h1TagRegex          = regexp.MustCompile(`(?s)<h1[^>]*>(.*?)</h1>`)
+	h2TagRegex          = regexp.MustCompile(`(?s)<h2[^>]*>(.*?)</h2>`)
+	h3TagRegex          = regexp.MustCompile(`(?s)<h3[^>]*>(.*?)</h3>`)
+	pTagRegex           = regexp.MustCompile(`(?s)<p[^>]*>(.*?)</p>`)
+	brTagRegex          = regexp.MustCompile(`(?i)<br\s*/?>`)
+	boldTagRegex        = regexp.MustCompile(`(?s)<b[^>]*>(.*?)</b>`)
+	strongTagRegex      = regexp.MustCompile(`(?s)<strong[^>]*>(.*?)</strong>`)
+	italicTagRegex      = regexp.MustCompile(`(?s)<i[^>]*>(.*?)</i>`)
+	emTagRegex          = regexp.MustCompile(`(?s)<em[^>]*>(.*?)</em>`)
+	anchorTagRegex      = regexp.MustCompile(`(?s)<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)</a>`)
+	ulTagRegex          = regexp.MustCompile(`(?i)<ul[^>]*>`)
+	ulEndTagRegex       = regexp.MustCompile(`(?i)</ul>`)
+	liTagRegex          = regexp.MustCompile(`(?s)<li[^>]*>(.*?)</li>`)
+	anyTagRegex         = regexp.MustCompile(`<[^>]+>`)
+	
+	// Metadata parsing regexes
+	postTitleRegex = regexp.MustCompile(`<h1 class="post-title">(.*?)</h1>`)
+	bylineRegex    = regexp.MustCompile(`(?s)<p class="byline">(.*?)</p>`)
+	bodyContentRegex = regexp.MustCompile(`(?s)<div class="body textual">(.*?)</div>`)
+)
+
 // extractYear pulls a 4-digit year from a date string
 func extractYear(dateStr string) int {
-	re := regexp.MustCompile(`(\d{4})`)
-	matches := re.FindStringSubmatch(dateStr)
+	matches := yearCaptureRegex.FindStringSubmatch(dateStr)
 	if len(matches) > 1 {
 		val, _ := strconv.Atoi(matches[1])
 		return val
@@ -39,45 +68,31 @@ func HTMLToMarkdown(html string) string {
 	
 	text := html
 	// Remove script/style
-	reScript := regexp.MustCompile(`(?s)<script.*?</script>`)
-	text = reScript.ReplaceAllString(text, "")
-	reStyle := regexp.MustCompile(`(?s)<style.*?</style>`)
-	text = reStyle.ReplaceAllString(text, "")
+	text = scriptTagRegex.ReplaceAllString(text, "")
+	text = styleTagRegex.ReplaceAllString(text, "")
 	
 	// Headers
-	reH1 := regexp.MustCompile(`(?s)<h1[^>]*>(.*?)</h1>`)
-	text = reH1.ReplaceAllString(text, "# $1\n\n")
-	
-	reH2 := regexp.MustCompile(`(?s)<h2[^>]*>(.*?)</h2>`)
-	text = reH2.ReplaceAllString(text, "## $1\n\n")
-	
-	reH3 := regexp.MustCompile(`(?s)<h3[^>]*>(.*?)</h3>`)
-	text = reH3.ReplaceAllString(text, "### $1\n\n")
+	text = h1TagRegex.ReplaceAllString(text, "# $1\n\n")
+	text = h2TagRegex.ReplaceAllString(text, "## $1\n\n")
+	text = h3TagRegex.ReplaceAllString(text, "### $1\n\n")
 	
 	// Paragraphs
-	reP := regexp.MustCompile(`(?s)<p[^>]*>(.*?)</p>`)
-	text = reP.ReplaceAllString(text, "$1\n\n")
+	text = pTagRegex.ReplaceAllString(text, "$1\n\n")
 	
 	// Breaks
-	reBr := regexp.MustCompile(`(?i)<br\s*/?>`)
-	text = reBr.ReplaceAllString(text, "\n")
+	text = brTagRegex.ReplaceAllString(text, "\n")
 	
 	// Bold
-	reBold := regexp.MustCompile(`(?s)<b[^>]*>(.*?)</b>`)
-	text = reBold.ReplaceAllString(text, "**$1**")
-	reStrong := regexp.MustCompile(`(?s)<strong[^>]*>(.*?)</strong>`)
-	text = reStrong.ReplaceAllString(text, "**$1**")
+	text = boldTagRegex.ReplaceAllString(text, "**$1**")
+	text = strongTagRegex.ReplaceAllString(text, "**$1**")
 	
 	// Italic
-	reItalic := regexp.MustCompile(`(?s)<i[^>]*>(.*?)</i>`)
-	text = reItalic.ReplaceAllString(text, "*$1*")
-	reEm := regexp.MustCompile(`(?s)<em[^>]*>(.*?)</em>`)
-	text = reEm.ReplaceAllString(text, "*$1*")
+	text = italicTagRegex.ReplaceAllString(text, "*$1*")
+	text = emTagRegex.ReplaceAllString(text, "*$1*")
 	
 	// Links
-	reLink := regexp.MustCompile(`(?s)<a\s+(?:[^>]*?\s+)?href=["']([^"]*)["'][^>]*>(.*?)</a>`)
-	text = reLink.ReplaceAllStringFunc(text, func(match string) string {
-		sub := reLink.FindStringSubmatch(match)
+	text = anchorTagRegex.ReplaceAllStringFunc(text, func(match string) string {
+		sub := anchorTagRegex.FindStringSubmatch(match)
 		if len(sub) < 3 {
 			return "" // Should not happen given the match
 		}
@@ -92,16 +107,12 @@ func HTMLToMarkdown(html string) string {
 	})
 	
 	// Lists
-	reUl := regexp.MustCompile(`(?i)<ul[^>]*>`) // Note: No need to escape / in Go raw strings
-	text = reUl.ReplaceAllString(text, "")
-	reUlEnd := regexp.MustCompile(`(?i)</ul>`)
-	text = reUlEnd.ReplaceAllString(text, "\n")
-	reLi := regexp.MustCompile(`(?s)<li[^>]*>(.*?)</li>`)
-	text = reLi.ReplaceAllString(text, "* $1\n")
+	text = ulTagRegex.ReplaceAllString(text, "")
+	text = ulEndTagRegex.ReplaceAllString(text, "\n")
+	text = liTagRegex.ReplaceAllString(text, "* $1\n")
 	
 	// Tags cleanup
-	reTags := regexp.MustCompile(`<[^>]+>`) // Note: No need to escape / in Go raw strings
-	text = reTags.ReplaceAllString(text, "")
+	text = anyTagRegex.ReplaceAllString(text, "")
 	
 	// Decode entities
 	r := strings.NewReplacer(
@@ -136,17 +147,13 @@ func ParseTranscriptFile(path string) (string, string, int, string, error) {
 	}
 	html := string(contentBytes)
 	
-	reTitle := regexp.MustCompile(`<h1 class="post-title">(.*?)</h1>`)
-	reDate := regexp.MustCompile(`(?s)<p class="byline">(.*?)</p>`)
-	reBody := regexp.MustCompile(`(?s)<div class="body textual">(.*?)</div>`)
-	
 	title := "Unknown Episode"
-	if matches := reTitle.FindStringSubmatch(html); len(matches) > 1 {
+	if matches := postTitleRegex.FindStringSubmatch(html); len(matches) > 1 {
 		title = strings.TrimSpace(matches[1])
 	}
 	
-	dateStr := "Unknown Date"
-	if matches := reDate.FindStringSubmatch(html); len(matches) > 1 {
+dateStr := "Unknown Date"
+	if matches := bylineRegex.FindStringSubmatch(html); len(matches) > 1 {
 		dateStr = strings.TrimSpace(matches[1])
 		// normalize whitespace
 		dateStr = strings.Join(strings.Fields(dateStr), " ")
@@ -154,7 +161,7 @@ func ParseTranscriptFile(path string) (string, string, int, string, error) {
 	year := extractYear(dateStr)
 	
 	rawBody := ""
-	if matches := reBody.FindStringSubmatch(html); len(matches) > 1 {
+	if matches := bodyContentRegex.FindStringSubmatch(html); len(matches) > 1 {
 		rawBody = matches[1]
 	}
 	
@@ -162,8 +169,7 @@ func ParseTranscriptFile(path string) (string, string, int, string, error) {
 }
 
 func GetEpNum(filename string) int {
-	re := regexp.MustCompile(`_(\d+)\.html`)
-	matches := re.FindStringSubmatch(filename)
+	matches := episodeNumberRegex.FindStringSubmatch(filename)
 	if len(matches) > 1 {
 		val, _ := strconv.Atoi(matches[1])
 		return val
@@ -187,7 +193,8 @@ func ProcessPrefix(prefix, dataDir, outputBase string, byYear bool) error {
 		return GetEpNum(files[i]) < GetEpNum(files[j])
 	})
 	
-	fmt.Printf("Processing %d files for %s (By Year: %v)...\n", len(files), prefix, byYear)
+	fmt.Printf("Processing %d files for %s (By Year: %v)...
+", len(files), prefix, byYear)
 	
 	currentWordCount := 0
 	currentByteCount := 0
@@ -253,7 +260,7 @@ func writeChunk(base, prefix string, start, end, year int, content []string, byY
 		filename = filepath.Join(base, fmt.Sprintf("%s_Transcripts_%d-%d.md", prefix, start, end))
 	}
 	
-	f, err := os.Create(filename)
+f, err := os.Create(filename)
 	if err != nil {
 		fmt.Printf("Error creating %s: %v\n", filename, err)
 		return

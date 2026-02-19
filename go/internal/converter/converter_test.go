@@ -37,7 +37,10 @@ func TestGetEpNum(t *testing.T) {
 }
 
 func TestProcessPrefix(t *testing.T) {
-	tmpDir, _ := os.MkdirTemp("", "processtest")
+	tmpDir, err := os.MkdirTemp("", "processtest")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
 	defer os.RemoveAll(tmpDir)
 
 	// Create dummy input files
