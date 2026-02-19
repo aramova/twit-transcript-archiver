@@ -77,7 +77,10 @@ func TestProcessPrefix(t *testing.T) {
 }
 
 func TestProcessPrefixByYear(t *testing.T) {
-	tmpDir, _ := os.MkdirTemp("", "processtestyear")
+	tmpDir, err := os.MkdirTemp("", "processtestyear")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
 	defer os.RemoveAll(tmpDir)
 
 	// Create dummy input files across different years
