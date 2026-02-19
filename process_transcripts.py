@@ -142,89 +142,56 @@ def html_to_markdown(html_content, ep_num=0, date_ymd="00-01-01"):
         # Pattern 4: (HH:MM:SS): (Discovered 2022)
         ts_match_p4 = re.match(r'^\((\d+:\d+(?::\d+)?)\)\s*:?\s*(.*)', line)
 
+        timestamp = None
+        speaker = None
+        rest_of_line = ""
+
         if ts_match_p1 and line[0].isdigit():
             timestamp = ts_match_p1.group(1)
             rest_of_line = ts_match_p1.group(2).strip()
-            formatted_prefix = f"EP:{ep_num} Date:{date_ymd} TS:{timestamp} -"
-            
-            if rest_of_line:
-                final_lines.append(f"{formatted_prefix} {rest_of_line}")
-            elif i + 1 < len(lines):
-                next_line = lines[i+1].strip()
-                is_next_ts = (re.match(r'^\d+:\d+', next_line) or 
-                              re.search(r'\[\d+:\d+\]', next_line) or 
-                              re.search(r'\(\d+:\d+\)', next_line))
-                if next_line and not is_next_ts:
-                    final_lines.append(f"{formatted_prefix} {next_line}")
-                    i += 1
-                else:
-                    final_lines.append(formatted_prefix)
-            else:
-                final_lines.append(formatted_prefix)
-                
         elif ts_match_p2:
             speaker = ts_match_p2.group(1).strip()
             timestamp = ts_match_p2.group(2).strip()
             rest_of_line = ts_match_p2.group(3).strip()
-            formatted_prefix = f"EP:{ep_num} Date:{date_ymd} TS:{timestamp} - {speaker}"
-            
-            if rest_of_line:
-                final_lines.append(f"{formatted_prefix} {rest_of_line}")
-            elif i + 1 < len(lines):
-                next_line = lines[i+1].strip()
-                is_next_ts = (re.match(r'^\d+:\d+', next_line) or 
-                              re.search(r'\[\d+:\d+\]', next_line) or 
-                              re.search(r'\(\d+:\d+\)', next_line))
-                if next_line and not is_next_ts:
-                    final_lines.append(f"{formatted_prefix} {next_line}")
-                    i += 1
-                else:
-                    final_lines.append(formatted_prefix)
-            else:
-                final_lines.append(formatted_prefix)
-
+            if rest_of_line.startswith(':'):
+                rest_of_line = rest_of_line.lstrip(':').strip()
         elif ts_match_p3:
             speaker = ts_match_p3.group(1).strip()
             timestamp = ts_match_p3.group(2).strip()
             rest_of_line = ts_match_p3.group(3).strip()
-            formatted_prefix = f"EP:{ep_num} Date:{date_ymd} TS:{timestamp} - {speaker}"
-            
-            if rest_of_line:
-                final_lines.append(f"{formatted_prefix} {rest_of_line}")
-            elif i + 1 < len(lines):
-                next_line = lines[i+1].strip()
-                is_next_ts = (re.match(r'^\d+:\d+', next_line) or 
-                              re.search(r'\[\d+:\d+\]', next_line) or 
-                              re.search(r'\(\d+:\d+\)', next_line))
-                if next_line and not is_next_ts:
-                    final_lines.append(f"{formatted_prefix} {next_line}")
-                    i += 1
-                else:
-                    final_lines.append(formatted_prefix)
-            else:
-                final_lines.append(formatted_prefix)
-
+            if rest_of_line.startswith(':'):
+                rest_of_line = rest_of_line.lstrip(':').strip()
         elif ts_match_p4:
             timestamp = ts_match_p4.group(1).strip()
             rest_of_line = ts_match_p4.group(2).strip()
+            if rest_of_line.startswith(':'):
+                rest_of_line = rest_of_line.lstrip(':').strip()
+
+        if timestamp:
             formatted_prefix = f"EP:{ep_num} Date:{date_ymd} TS:{timestamp} -"
+            if speaker:
+                formatted_prefix = f"EP:{ep_num} Date:{date_ymd} TS:{timestamp} - {speaker}"
             
-            if rest_of_line:
-                final_lines.append(f"{formatted_prefix} {rest_of_line}")
-            elif i + 1 < len(lines):
+            merged_text = rest_of_line
+            if i + 1 < len(lines):
                 next_line = lines[i+1].strip()
                 is_next_ts = (re.match(r'^\d+:\d+', next_line) or 
                               re.search(r'\[\d+:\d+\]', next_line) or 
-                              re.search(r'\(\d+:\d+\)', next_line))
+                              re.match(r'^.+?\s*\(\d+:\d+', next_line) or
+                              re.match(r'^\(\d+:\d+\)', next_line))
                 if next_line and not is_next_ts:
-                    final_lines.append(f"{formatted_prefix} {next_line}")
+                    if merged_text:
+                        merged_text += " " + next_line
+                    else:
+                        merged_text = next_line
                     i += 1
-                else:
-                    final_lines.append(formatted_prefix)
+            
+            if merged_text:
+                final_lines.append(f"{formatted_prefix} {merged_text}")
             else:
                 final_lines.append(formatted_prefix)
         else:
-            final_lines.append(lines[i]) # Keep original if no match
+            final_lines.append(line)
             
         i += 1
 
