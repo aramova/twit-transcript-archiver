@@ -9,7 +9,7 @@ This toolset allows you to download transcripts from TWiT.tv and process them in
 *   **Resume Capability:** Skips already downloaded transcript files.
 *   **NotebookLM Ready:** Converts HTML to clean Markdown and chunks output files to stay under 500,000 words / 200MB limits.
 *   **Robust Logging:** Includes a `--debug` flag to trace the scraper's logic.
-*   **Security Hardened:** Enforces strict relative URL validation and sanitizes Markdown links to prevent SSRF and XSS.
+*   **Security Considerations:** Enforces strict relative URL validation and sanitizes Markdown links to prevent SSRF and XSS.
 
 ## Usage
 
