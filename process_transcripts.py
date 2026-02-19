@@ -2,6 +2,7 @@ import os
 import re
 import glob
 import argparse
+import datetime
 
 # Configuration
 DATA_DIR = os.path.join(os.getcwd(), "data")
@@ -49,7 +50,35 @@ def extract_year(date_str):
     match = YEAR_RE.search(date_str)
     return int(match.group(1)) if match else 0
 
-def html_to_markdown(html_content):
+def parse_date_ymd(date_str):
+    """
+    Parses a date string into YY-MM-DD format.
+    Handles ordinal suffixes (st, nd, rd, th).
+    """
+    if not date_str:
+        return "00-01-01"
+
+    # Remove ordinal suffixes
+    clean_date = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', date_str)
+    
+    # Common formats
+    formats = [
+        "%B %d %Y",      # May 21 2025
+        "%b %d %Y",      # Feb 5 2025
+        "%A, %B %d, %Y",  # Wednesday, February 18, 2026
+        "%B %d, %Y"      # May 21, 2025
+    ]
+    
+    for fmt in formats:
+        try:
+            dt = datetime.datetime.strptime(clean_date, fmt)
+            return dt.strftime("%y-%m-%d")
+        except ValueError:
+            continue
+            
+    return "00-01-01" # Fallback
+
+def html_to_markdown(html_content, ep_num=0, date_ymd="00-01-01"):
     if not html_content:
         return ""
     
@@ -91,9 +120,117 @@ def html_to_markdown(html_content):
         elif not lines or lines[-1] != "":
             lines.append("")
             
-    return "\n".join(lines).strip()
+    # --- Timestamp Standardization Pass ---
+    final_lines = []
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if not line:
+            final_lines.append("")
+            i += 1
+            continue
+            
+        # Pattern 1: HH:MM:SS - Speaker (Standard)
+        ts_match_p1 = re.match(r'^(\d+:\d+(?::\d+)?)\s*(?:-\s*)?(.*)', line)
+        
+        # Pattern 2: Speaker [HH:MM:SS]: (Secondary)
+        ts_match_p2 = re.match(r'^(.+?)\s*\[(\d+:\d+(?::\d+)?)\]\s*:?\s*(.*)', line)
+        
+        # Pattern 3: Speaker (HH:MM:SS): (Discovered 2021-2023)
+        ts_match_p3 = re.match(r'^(.+?)\s*\((\d+:\d+(?::\d+)?)\s*\)\s*:?\s*(.*)', line)
 
-def parse_transcript_file(filepath):
+        # Pattern 4: (HH:MM:SS): (Discovered 2022)
+        ts_match_p4 = re.match(r'^\((\d+:\d+(?::\d+)?)\)\s*:?\s*(.*)', line)
+
+        if ts_match_p1 and line[0].isdigit():
+            timestamp = ts_match_p1.group(1)
+            rest_of_line = ts_match_p1.group(2).strip()
+            formatted_prefix = f"EP:{ep_num} Date:{date_ymd} TS:{timestamp} -"
+            
+            if rest_of_line:
+                final_lines.append(f"{formatted_prefix} {rest_of_line}")
+            elif i + 1 < len(lines):
+                next_line = lines[i+1].strip()
+                is_next_ts = (re.match(r'^\d+:\d+', next_line) or 
+                              re.search(r'\[\d+:\d+\]', next_line) or 
+                              re.search(r'\(\d+:\d+\)', next_line))
+                if next_line and not is_next_ts:
+                    final_lines.append(f"{formatted_prefix} {next_line}")
+                    i += 1
+                else:
+                    final_lines.append(formatted_prefix)
+            else:
+                final_lines.append(formatted_prefix)
+                
+        elif ts_match_p2:
+            speaker = ts_match_p2.group(1).strip()
+            timestamp = ts_match_p2.group(2).strip()
+            rest_of_line = ts_match_p2.group(3).strip()
+            formatted_prefix = f"EP:{ep_num} Date:{date_ymd} TS:{timestamp} - {speaker}"
+            
+            if rest_of_line:
+                final_lines.append(f"{formatted_prefix} {rest_of_line}")
+            elif i + 1 < len(lines):
+                next_line = lines[i+1].strip()
+                is_next_ts = (re.match(r'^\d+:\d+', next_line) or 
+                              re.search(r'\[\d+:\d+\]', next_line) or 
+                              re.search(r'\(\d+:\d+\)', next_line))
+                if next_line and not is_next_ts:
+                    final_lines.append(f"{formatted_prefix} {next_line}")
+                    i += 1
+                else:
+                    final_lines.append(formatted_prefix)
+            else:
+                final_lines.append(formatted_prefix)
+
+        elif ts_match_p3:
+            speaker = ts_match_p3.group(1).strip()
+            timestamp = ts_match_p3.group(2).strip()
+            rest_of_line = ts_match_p3.group(3).strip()
+            formatted_prefix = f"EP:{ep_num} Date:{date_ymd} TS:{timestamp} - {speaker}"
+            
+            if rest_of_line:
+                final_lines.append(f"{formatted_prefix} {rest_of_line}")
+            elif i + 1 < len(lines):
+                next_line = lines[i+1].strip()
+                is_next_ts = (re.match(r'^\d+:\d+', next_line) or 
+                              re.search(r'\[\d+:\d+\]', next_line) or 
+                              re.search(r'\(\d+:\d+\)', next_line))
+                if next_line and not is_next_ts:
+                    final_lines.append(f"{formatted_prefix} {next_line}")
+                    i += 1
+                else:
+                    final_lines.append(formatted_prefix)
+            else:
+                final_lines.append(formatted_prefix)
+
+        elif ts_match_p4:
+            timestamp = ts_match_p4.group(1).strip()
+            rest_of_line = ts_match_p4.group(2).strip()
+            formatted_prefix = f"EP:{ep_num} Date:{date_ymd} TS:{timestamp} -"
+            
+            if rest_of_line:
+                final_lines.append(f"{formatted_prefix} {rest_of_line}")
+            elif i + 1 < len(lines):
+                next_line = lines[i+1].strip()
+                is_next_ts = (re.match(r'^\d+:\d+', next_line) or 
+                              re.search(r'\[\d+:\d+\]', next_line) or 
+                              re.search(r'\(\d+:\d+\)', next_line))
+                if next_line and not is_next_ts:
+                    final_lines.append(f"{formatted_prefix} {next_line}")
+                    i += 1
+                else:
+                    final_lines.append(formatted_prefix)
+            else:
+                final_lines.append(formatted_prefix)
+        else:
+            final_lines.append(lines[i]) # Keep original if no match
+            
+        i += 1
+
+    return "\n".join(final_lines).strip()
+
+def parse_transcript_file(filepath, ep_num=0):
     """
     Parses a single HTML transcript file to extract metadata and clean content.
     Returns: (title, date_str, year, md_content)
@@ -111,7 +248,8 @@ def parse_transcript_file(filepath):
     year = extract_year(date_str)
     
     raw_content = content_match.group(1) if content_match else ""
-    md_content = html_to_markdown(raw_content)
+    ymd_date = parse_date_ymd(date_str)
+    md_content = html_to_markdown(raw_content, ep_num=ep_num, date_ymd=ymd_date)
     
     return title, date_str, year, md_content
 
@@ -172,7 +310,7 @@ def process_prefix(prefix, by_year=False):
     for filepath in files:
         try:
             ep_num = get_ep_num(filepath)
-            title, date_str, year, content = parse_transcript_file(filepath)
+            title, date_str, year, content = parse_transcript_file(filepath, ep_num=ep_num)
             
             # Metadata and content for the markdown file
             episode_header = f"# Episode: {title}\n**Date:** {date_str}\n\n"
