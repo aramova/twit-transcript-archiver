@@ -20,9 +20,46 @@ func TestHTMLToMarkdown(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := HTMLToMarkdown(tt.input)
+		got := HTMLToMarkdown(tt.input, 0, "00-01-01")
 		if !strings.Contains(got, tt.expected) {
 			t.Errorf("HTMLToMarkdown(%q) = %q; want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestHTMLToMarkdownStandardization(t *testing.T) {
+	tests := []struct {
+		input    string
+		epNum    int
+		date     string
+		expected string
+	}{
+		{
+			"00:00:52 - Leo Laporte\nHello",
+			801, "25-05-21",
+			"EP:801 Date:25-05-21 TS:00:00:52 - Leo Laporte Hello",
+		},
+		{
+			"Leo Laporte [00:00:52]:\nHello",
+			801, "25-05-21",
+			"EP:801 Date:25-05-21 TS:00:00:52 - Leo Laporte Hello",
+		},
+		{
+			"Stacey Higginbotham (00:03:04):\nYou want",
+			640, "21-12-07",
+			"EP:640 Date:21-12-07 TS:00:03:04 - Stacey Higginbotham You want",
+		},
+		{
+			"(00:00:52):\nHello",
+			801, "25-05-21",
+			"EP:801 Date:25-05-21 TS:00:00:52 - Hello",
+		},
+	}
+
+	for _, tt := range tests {
+		got := HTMLToMarkdown(tt.input, tt.epNum, tt.date)
+		if !strings.Contains(got, tt.expected) {
+			t.Errorf("HTMLToMarkdown Standardization failed for %q\nGot: %q\nWant: %q", tt.input, got, tt.expected)
 		}
 	}
 }

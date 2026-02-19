@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Constants
@@ -48,6 +49,19 @@ var (
 	postTitleRegex   = regexp.MustCompile(`<h1 class="post-title">(.*?)</h1>`)
 	bylineRegex      = regexp.MustCompile(`(?s)<p class="byline">(.*?)</p>`)
 	bodyContentRegex = regexp.MustCompile(`(?s)<div class="body textual">(.*?)</div>`)
+
+	// Timestamp Patterns
+	// Pattern 1: HH:MM:SS - Speaker (Standard)
+	tsPattern1 = regexp.MustCompile(`^(\d+:\d+(?::\d+)?)\s*(?:-\s*)?(.*)`)
+	// Pattern 2: Speaker [HH:MM:SS]: (Secondary)
+	tsPattern2 = regexp.MustCompile(`^(.+?)\s*\[(\d+:\d+(?::\d+)?)\].*?\s*(.*)`)
+	// Pattern 3: Speaker (HH:MM:SS): (Discovered 2021-2023)
+	tsPattern3 = regexp.MustCompile(`^(.+?)\s*\((\d+:\d+(?::\d+)?)\)\s*:?\s*(.*)`)
+	// Pattern 4: (HH:MM:SS): (Discovered 2022)
+	tsPattern4 = regexp.MustCompile(`^\((\d+:\d+(?::\d+)?)\)\s*:?\s*(.*)`)
+
+	// Generic Lookahead for line merging logic
+	genericTSMatch = regexp.MustCompile(`^(\d+:\d+|.+?\s*\[\d+:\d+|\(\d+:\d+|.+?\s*\(\d+:\d+)`)
 )
 
 // extractYear pulls a 4-digit year from a date string
@@ -60,8 +74,35 @@ func extractYear(dateStr string) int {
 	return 0
 }
 
-// HTMLToMarkdown converts raw HTML transcript content to Markdown
-func HTMLToMarkdown(html string) string {
+// parseDateYMD converts various date formats (e.g., "May 21st 2025") into "YY-MM-DD"
+func parseDateYMD(dateStr string) string {
+	if dateStr == "" || dateStr == "Unknown Date" {
+		return "00-01-01"
+	}
+
+	// Remove ordinal suffixes (st, nd, rd, th)
+	re := regexp.MustCompile(`(\d+)(st|nd|rd|th)`)
+	cleanDate := re.ReplaceAllString(dateStr, "$1")
+
+	// Common layouts for time.Parse
+	layouts := []string{
+		"January 02 2006",
+		"Jan 02 2006",
+		"Monday, January 02, 2006",
+		"January 02, 2006",
+	}
+
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, cleanDate); err == nil {
+			return t.Format("06-01-02") // YY-MM-DD
+		}
+	}
+
+	return "00-01-01" // Fallback
+}
+
+// HTMLToMarkdown converts raw HTML transcript content to Markdown with timestamp standardization
+func HTMLToMarkdown(html string, epNum int, dateYMD string) string {
 	if html == "" {
 		return ""
 	}
@@ -125,18 +166,78 @@ func HTMLToMarkdown(html string) string {
 	)
 	text = r.Replace(text)
 
-	// Cleanup whitespace
-	var lines []string
+	// Split into lines for standardization
+	var rawLines []string
 	for _, line := range strings.Split(text, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed != "" {
-			lines = append(lines, trimmed)
-		} else if len(lines) > 0 && lines[len(lines)-1] != "" {
-			lines = append(lines, "")
+			rawLines = append(rawLines, trimmed)
+		} else if len(rawLines) > 0 && rawLines[len(rawLines)-1] != "" {
+			rawLines = append(rawLines, "")
 		}
 	}
 
-	return strings.TrimSpace(strings.Join(lines, "\n"))
+	// --- Timestamp Standardization Pass ---
+	var finalLines []string
+	for i := 0; i < len(rawLines); i++ {
+		line := rawLines[i]
+		if line == "" {
+			finalLines = append(finalLines, "")
+			continue
+		}
+
+		var timestamp, speaker, restOfLine string
+		var matched bool
+
+		// Check Pattern 1: HH:MM:SS - Speaker
+		if matches := tsPattern1.FindStringSubmatch(line); len(matches) > 1 && len(line) > 0 && line[0] >= '0' && line[0] <= '9' {
+			timestamp = matches[1]
+			restOfLine = strings.TrimSpace(matches[2])
+			speaker = "" // Format will be TS - restOfLine
+			matched = true
+		} else if matches := tsPattern2.FindStringSubmatch(line); len(matches) > 3 { // Pattern 2: Speaker [HH:MM:SS]:
+			speaker = strings.TrimSpace(matches[1])
+			timestamp = strings.TrimSpace(matches[2])
+			restOfLine = strings.TrimSpace(matches[3])
+			matched = true
+		} else if matches := tsPattern3.FindStringSubmatch(line); len(matches) > 3 { // Pattern 3: Speaker (HH:MM:SS):
+			speaker = strings.TrimSpace(matches[1])
+			timestamp = strings.TrimSpace(matches[2])
+			restOfLine = strings.TrimSpace(matches[3])
+			matched = true
+		} else if matches := tsPattern4.FindStringSubmatch(line); len(matches) > 2 { // Pattern 4: (HH:MM:SS):
+			timestamp = strings.TrimSpace(matches[1])
+			restOfLine = strings.TrimSpace(matches[2])
+			speaker = ""
+			matched = true
+		}
+
+		if matched {
+			prefix := fmt.Sprintf("EP:%d Date:%s TS:%s -", epNum, dateYMD, timestamp)
+			if speaker != "" {
+				prefix = fmt.Sprintf("EP:%d Date:%s TS:%s - %s", epNum, dateYMD, timestamp, speaker)
+			}
+
+			if restOfLine != "" {
+				finalLines = append(finalLines, fmt.Sprintf("%s %s", prefix, restOfLine))
+			} else if i+1 < len(rawLines) {
+				nextLine := strings.TrimSpace(rawLines[i+1])
+				isNextTS := genericTSMatch.MatchString(nextLine)
+				if nextLine != "" && !isNextTS {
+					finalLines = append(finalLines, fmt.Sprintf("%s %s", prefix, nextLine))
+					i++ // Consume next line
+				} else {
+					finalLines = append(finalLines, prefix)
+				}
+			} else {
+				finalLines = append(finalLines, prefix)
+			}
+		} else {
+			finalLines = append(finalLines, line)
+		}
+	}
+
+	return strings.TrimSpace(strings.Join(finalLines, "\n"))
 }
 
 // ParseTranscriptFile extracts title, date, year and body from a file
@@ -165,7 +266,10 @@ func ParseTranscriptFile(path string) (string, string, int, string, error) {
 		rawBody = matches[1]
 	}
 
-	return title, dateStr, year, HTMLToMarkdown(rawBody), nil
+	epNum := GetEpNum(path)
+	dateYMD := parseDateYMD(dateStr)
+
+	return title, dateStr, year, HTMLToMarkdown(rawBody, epNum, dateYMD), nil
 }
 
 func GetEpNum(filename string) int {
