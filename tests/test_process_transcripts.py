@@ -129,6 +129,34 @@ class TestProcessTranscripts(unittest.TestCase):
         self.assertIn("# Episode: Ep 1", full_text)
         self.assertIn("# Episode: Ep 2", full_text)
 
+    @patch("process_transcripts.glob.glob")
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("process_transcripts.parse_transcript_file")
+    def test_process_prefix_by_year(self, mock_parse, mock_file, mock_glob):
+        # Setup: Two files from different years
+        mock_glob.return_value = ["IM_1.html", "IM_2.html"]
+        mock_parse.side_effect = [
+            ("Ep 1", "Dec 31, 2024", 2024, "Content 2024"),
+            ("Ep 2", "Jan 1, 2025", 2025, "Content 2025")
+        ]
+        
+        # Execute with by_year=True
+        process_transcripts.process_prefix("IM", by_year=True)
+        
+        # Assert - should write two lines/files
+        # We check the filenames opened
+        # mock_file() is the handle, but we want the calls to open()
+        
+        # Filter calls to open that are for writing
+        write_calls = [call for call in mock_file.call_args_list if 'w' in call[0] or (len(call[0]) > 1 and call[0][1] == 'w')]
+        
+        # Using simple verification of filenames in call args
+        filenames = [call.args[0] for call in mock_file.call_args_list if isinstance(call.args[0], str) and "Transcripts" in call.args[0]]
+        
+        self.assertEqual(len(filenames), 2)
+        self.assertTrue(any("2024_1_1.md" in f for f in filenames))
+        self.assertTrue(any("2025_2_2.md" in f for f in filenames))
+
     def test_argument_parsing(self):
         # Difficult to unit test argparse directly without refactoring main, 
         # but we can assume the logic in main matches usage.
