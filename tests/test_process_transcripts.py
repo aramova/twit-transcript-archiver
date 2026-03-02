@@ -157,6 +157,42 @@ class TestProcessTranscripts(unittest.TestCase):
         self.assertTrue(any("2024_1_1.md" in f for f in filenames))
         self.assertTrue(any("2025_2_2.md" in f for f in filenames))
 
+    def test_timestamp_pattern5_speaker_no_timestamp(self):
+        """Pattern 5: Speaker Name: (no timestamp) should produce EP/Date prefix without TS: field."""
+        html = "Leo Laporte: It's time for TWiT"
+        md = process_transcripts.html_to_markdown(html, ep_num=638, date_ymd="17-12-17")
+        self.assertIn("EP:638 Date:17-12-17 - Leo Laporte", md)
+        self.assertNotIn("TS:", md)
+        self.assertIn("It's time for TWiT", md)
+
+    def test_timestamp_pattern5_multiword_speaker(self):
+        """Pattern 5: Multi-word speaker names should be captured."""
+        html = "Jeff Jarvis: Something about Google"
+        md = process_transcripts.html_to_markdown(html, ep_num=233, date_ymd="14-01-15")
+        self.assertIn("EP:233 Date:14-01-15 - Jeff Jarvis", md)
+        self.assertIn("Something about Google", md)
+        self.assertNotIn("TS:", md)
+
+    def test_extract_ep_from_title(self):
+        """Episode number should be extracted from common title formats."""
+        self.assertEqual(process_transcripts.extract_ep_from_title("This Week in Tech 638 Transcript"), 638)
+        self.assertEqual(process_transcripts.extract_ep_from_title("Security Now 1000 transcript"), 1000)
+        self.assertEqual(process_transcripts.extract_ep_from_title("This Week in Google 233 (Transcript)"), 233)
+        self.assertEqual(process_transcripts.extract_ep_from_title("No Number Here"), 0)
+        self.assertEqual(process_transcripts.extract_ep_from_title(""), 0)
+
+    def test_ai_generated_detection(self):
+        """AI-generated transcripts should get a [AI-Generated Transcript] tag."""
+        html = "<p>Please be advised this transcript is AI-generated and may not be word for word. Time codes</p><p>Leo Laporte: Hello</p>"
+        md = process_transcripts.html_to_markdown(html)
+        self.assertIn("[AI-Generated Transcript]", md)
+
+    def test_non_ai_transcript_no_tag(self):
+        """Non-AI transcripts should NOT get the AI tag."""
+        html = "<p>Leo Laporte: Hello everyone</p>"
+        md = process_transcripts.html_to_markdown(html)
+        self.assertNotIn("[AI-Generated Transcript]", md)
+
     def test_argument_parsing(self):
         # Difficult to unit test argparse directly without refactoring main, 
         # but we can assume the logic in main matches usage.

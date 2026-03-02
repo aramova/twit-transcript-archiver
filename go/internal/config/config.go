@@ -20,6 +20,9 @@ var (
 
 	// PrefixRegex matches transcript filenames like IM_123.html or TWIG_05.html
 	PrefixRegex = regexp.MustCompile(`([A-Z0-9]+)_\d+\.html`)
+
+	// UserAgent is the Chrome user agent to use for requests
+	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
 // ShowMap maps lowercase show title segments to file prefixes

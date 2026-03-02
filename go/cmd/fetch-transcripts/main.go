@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/aramova/twit-transcript-archiver/go/internal/config"
 	"github.com/aramova/twit-transcript-archiver/go/internal/scraper"
@@ -15,20 +16,32 @@ func main() {
 	allPtr := flag.Bool("all", false, "Download transcripts for ALL known shows")
 	pagesPtr := flag.Int("pages", 200, "Number of pages to scan")
 	refreshPtr := flag.Bool("refresh-list", false, "Force re-download of list pages")
+	throttlePtr := flag.Duration("throttle", 1*time.Second, "Duration to wait between requests (e.g. 1s, 500ms)")
+	noThrottlePtr := flag.Bool("no-throttle", false, "Disable throttling")
 	// "shows" flag is harder in Go flag package as it doesn't support nargs easily without a custom Value
 	// We'll treat remaining args as shows if --all is not set
-	
+
 	flag.Parse()
-	
-dataDir := config.GetDataDir()
+
+	dataDir := config.GetDataDir()
 	if err := utils.EnsureDir(dataDir); err != nil {
 		fmt.Printf("Error creating data dir: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("Using data directory: %s\n", dataDir)
 
+	throttle := *throttlePtr
+	if *noThrottlePtr {
+		throttle = 0
+	}
+	if throttle > 0 {
+		fmt.Printf("Throttling enabled: %v delay\n", throttle)
+	} else {
+		fmt.Println("Throttling disabled.")
+	}
+
 	targetPrefixes := make(map[string]bool)
-	
+
 	if *allPtr {
 		for _, prefix := range config.ShowMap {
 			targetPrefixes[prefix] = true
@@ -43,7 +56,7 @@ dataDir := config.GetDataDir()
 			for _, arg := range args {
 				argClean := strings.ToLower(strings.TrimSpace(arg))
 				found := false
-				
+
 				// Check values (prefixes)
 				for _, p := range config.ShowMap {
 					if p == strings.ToUpper(argClean) {
@@ -52,21 +65,23 @@ dataDir := config.GetDataDir()
 						break
 					}
 				}
-				if found { continue }
-				
+				if found {
+					continue
+				}
+
 				// Check keys (names)
 				if prefix, ok := config.ShowMap[argClean]; ok {
 					targetPrefixes[prefix] = true
 					found = true
 				}
-				
+
 				if !found {
 					fmt.Printf("Warning: Unknown show '%s'\n", arg)
 				}
 			}
 		}
 	}
-	
+
 	var shows []string
 	for p := range targetPrefixes {
 		shows = append(shows, p)
@@ -74,21 +89,21 @@ dataDir := config.GetDataDir()
 	fmt.Printf("Targeting Shows: %v\n", shows)
 
 	stats := struct {
-		PagesScanned        int
-		PagesDownloaded     int
-		PagesCached         int
-		TranscriptsFound    int
+		PagesScanned          int
+		PagesDownloaded       int
+		PagesCached           int
+		TranscriptsFound      int
 		TranscriptsDownloaded int
-		TranscriptsSkipped  int
-		TranscriptsIgnored  int
+		TranscriptsSkipped    int
+		TranscriptsIgnored    int
 	}{}
 
 	// Main Loop
 	for pageNum := 1; pageNum <= *pagesPtr; pageNum++ {
 		stats.PagesScanned++
 		fmt.Printf("--- Processing Page %d ---\n", pageNum)
-		
-		html, cached, err := scraper.GetListPageWithCacheStatus(pageNum, dataDir, *refreshPtr)
+
+		html, cached, err := scraper.GetListPageWithCacheStatus(pageNum, dataDir, *refreshPtr, throttle)
 		if err != nil {
 			fmt.Printf("Failed to get content for page %d: %v. Stopping.\n", pageNum, err)
 			break
@@ -98,30 +113,30 @@ dataDir := config.GetDataDir()
 		} else {
 			stats.PagesDownloaded++
 		}
-		
+
 		items := scraper.ExtractItems(html)
 		if len(items) == 0 {
 			fmt.Printf("No items found on page %d. Stopping.\n", pageNum)
 			break
 		}
-		
+
 		fmt.Printf("Found %d items on page %d.\n", len(items), pageNum)
-		
+
 		for _, item := range items {
 			stats.TranscriptsFound++
 			titleLower := strings.ToLower(item.Title)
 			var matchedPrefix string
-			
+
 			for name, prefix := range config.ShowMap {
 				if strings.Contains(titleLower, name) {
 					matchedPrefix = prefix
 					break
 				}
 			}
-		
+
 			if matchedPrefix != "" {
 				if targetPrefixes[matchedPrefix] {
-					skipped, err := scraper.DownloadTranscriptWithStatus(item.URL, item.Title, matchedPrefix, dataDir)
+					skipped, err := scraper.DownloadTranscriptWithStatus(item.URL, item.Title, matchedPrefix, dataDir, throttle)
 					if err != nil {
 						fmt.Printf("Error downloading %s: %v\n", item.Title, err)
 					} else if skipped {

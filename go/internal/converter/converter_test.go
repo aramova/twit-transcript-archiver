@@ -64,6 +64,75 @@ func TestHTMLToMarkdownStandardization(t *testing.T) {
 	}
 }
 
+func TestHTMLToMarkdownPattern5SpeakerNoTimestamp(t *testing.T) {
+	tests := []struct {
+		input    string
+		epNum    int
+		date     string
+		expected string
+		notWant  string
+	}{
+		{
+			"Leo Laporte: It's time for TWiT",
+			638, "17-12-17",
+			"EP:638 Date:17-12-17 - Leo Laporte",
+			"TS:",
+		},
+		{
+			"Jeff Jarvis: Something about Google",
+			233, "14-01-15",
+			"EP:233 Date:14-01-15 - Jeff Jarvis",
+			"TS:",
+		},
+	}
+
+	for _, tt := range tests {
+		got := HTMLToMarkdown(tt.input, tt.epNum, tt.date)
+		if !strings.Contains(got, tt.expected) {
+			t.Errorf("Pattern 5 failed for %q\nGot: %q\nWant substring: %q", tt.input, got, tt.expected)
+		}
+		if strings.Contains(got, tt.notWant) {
+			t.Errorf("Pattern 5 should NOT contain %q in output for %q\nGot: %q", tt.notWant, tt.input, got)
+		}
+	}
+}
+
+func TestExtractEpFromTitle(t *testing.T) {
+	tests := []struct {
+		title    string
+		expected int
+	}{
+		{"This Week in Tech 638 Transcript", 638},
+		{"Security Now 1000 transcript", 1000},
+		{"This Week in Google 233 (Transcript)", 233},
+		{"No Number Here", 0},
+		{"", 0},
+	}
+
+	for _, tt := range tests {
+		got := extractEpFromTitle(tt.title)
+		if got != tt.expected {
+			t.Errorf("extractEpFromTitle(%q) = %d; want %d", tt.title, got, tt.expected)
+		}
+	}
+}
+
+func TestAIGeneratedDetection(t *testing.T) {
+	// AI-generated transcript should get tag
+	aiHTML := "Please be advised this transcript is AI-generated and may not be word for word.\nLeo Laporte: Hello"
+	got := HTMLToMarkdown(aiHTML, 0, "00-01-01")
+	if !strings.Contains(got, "[AI-Generated Transcript]") {
+		t.Errorf("AI-generated transcript should contain [AI-Generated Transcript] tag\nGot: %q", got)
+	}
+
+	// Non-AI transcript should NOT get tag
+	normalHTML := "Leo Laporte: Hello everyone"
+	got = HTMLToMarkdown(normalHTML, 0, "00-01-01")
+	if strings.Contains(got, "[AI-Generated Transcript]") {
+		t.Errorf("Non-AI transcript should NOT contain [AI-Generated Transcript] tag\nGot: %q", got)
+	}
+}
+
 func TestGetEpNum(t *testing.T) {
 	if n := GetEpNum("IM_100.html"); n != 100 {
 		t.Errorf("Expected 100, got %d", n)

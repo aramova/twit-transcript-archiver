@@ -17,7 +17,7 @@ func TestExtractItems(t *testing.T) {
 	<div class="item summary">
 		<h2 class="title"><a href="/show/2">Show Title 2</a></h2>
 	</div>`
-	
+
 	items := ExtractItems(html)
 	if len(items) != 2 {
 		t.Errorf("Expected 2 items, got %d", len(items))
@@ -38,7 +38,7 @@ func TestDownloadPage(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	content, err := DownloadPage(ts.URL)
+	content, err := DownloadPage(ts.URL, 0)
 	if err != nil {
 		t.Errorf("DownloadPage failed: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestDownloadPage_RetryFail(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	_, err := DownloadPage(ts.URL)
+	_, err := DownloadPage(ts.URL, 0)
 	if err == nil {
 		t.Error("Expected error from 500 response, got nil")
 	}
@@ -62,12 +62,12 @@ func TestDownloadPage_RetryFail(t *testing.T) {
 func TestGetListPage_Cache(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "twittest")
 	defer os.RemoveAll(tmpDir)
-	
+
 	filename := filepath.Join(tmpDir, "transcripts_page_6.html")
 	os.WriteFile(filename, []byte("CachedContent"), 0644)
-	
+
 	// Should use cache for page 6
-	content, err := GetListPage(6, tmpDir, false)
+	content, err := GetListPage(6, tmpDir, false, 0)
 	if err != nil {
 		t.Errorf("GetListPage failed: %v", err)
 	}
@@ -79,15 +79,15 @@ func TestGetListPage_Cache(t *testing.T) {
 func TestDownloadTranscript(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "twittest")
 	defer os.RemoveAll(tmpDir)
-	
-	// Mock download by mocking DownloadPage? 
+
+	// Mock download by mocking DownloadPage?
 	// Since DownloadPage uses http.Get, we can't easily mock it without dependency injection or modifying global state (bad).
 	// But we can check if it SKIPS existing files without network.
-	
+
 	filename := filepath.Join(tmpDir, "IM_123.html")
 	os.WriteFile(filename, []byte("Existing"), 0644)
-	
-	err := DownloadTranscript("/path", "Show 123", "IM", tmpDir)
+
+	err := DownloadTranscript("/path", "Show 123", "IM", tmpDir, 0)
 	if err != nil {
 		t.Errorf("DownloadTranscript failed: %v", err)
 	}

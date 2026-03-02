@@ -28,22 +28,24 @@ var (
 	episodeNumberRegex = regexp.MustCompile(`_(\d+)\.html`)
 
 	// HTML parsing regexes
-	scriptTagRegex = regexp.MustCompile(`(?s)<script.*?</script>`)
-	styleTagRegex  = regexp.MustCompile(`(?s)<style.*?</style>`)
-	h1TagRegex     = regexp.MustCompile(`(?s)<h1[^>]*>(.*?)</h1>`)
-	h2TagRegex     = regexp.MustCompile(`(?s)<h2[^>]*>(.*?)</h2>`)
-	h3TagRegex     = regexp.MustCompile(`(?s)<h3[^>]*>(.*?)</h3>`)
-	pTagRegex      = regexp.MustCompile(`(?s)<p[^>]*>(.*?)</p>`)
-	brTagRegex     = regexp.MustCompile(`(?i)<br\s*/?>`)
-	boldTagRegex   = regexp.MustCompile(`(?s)<b[^>]*>(.*?)</b>`)
-	strongTagRegex = regexp.MustCompile(`(?s)<strong[^>]*>(.*?)</strong>`)
-	italicTagRegex = regexp.MustCompile(`(?s)<i[^>]*>(.*?)</i>`)
-	emTagRegex     = regexp.MustCompile(`(?s)<em[^>]*>(.*?)</em>`)
-	anchorTagRegex = regexp.MustCompile(`(?s)<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)</a>`)
-	ulTagRegex     = regexp.MustCompile(`(?i)<ul[^>]*>`)
-	ulEndTagRegex  = regexp.MustCompile(`(?i)</ul>`)
-	liTagRegex     = regexp.MustCompile(`(?s)<li[^>]*>(.*?)</li>`)
-	anyTagRegex    = regexp.MustCompile(`<[^>]+>`)
+	scriptTagRegex  = regexp.MustCompile(`(?s)<script.*?</script>`)
+	styleTagRegex   = regexp.MustCompile(`(?s)<style.*?</style>`)
+	h1TagRegex      = regexp.MustCompile(`(?s)<h1[^>]*>(.*?)</h1>`)
+	h2TagRegex      = regexp.MustCompile(`(?s)<h2[^>]*>(.*?)</h2>`)
+	h3TagRegex      = regexp.MustCompile(`(?s)<h3[^>]*>(.*?)</h3>`)
+	pTagRegex       = regexp.MustCompile(`(?s)<p[^>]*>(.*?)</p>`)
+	brTagRegex      = regexp.MustCompile(`(?i)<br\s*/?>`)
+	boldTagRegex    = regexp.MustCompile(`(?s)<b[^>]*>(.*?)</b>`)
+	strongTagRegex  = regexp.MustCompile(`(?s)<strong[^>]*>(.*?)</strong>`)
+	italicTagRegex  = regexp.MustCompile(`(?s)<i[^>]*>(.*?)</i>`)
+	structTagRegex  = regexp.MustCompile(`(?i)</?(?:table|p|br|tr|div)[^>]*>`)
+	emTagRegex      = regexp.MustCompile(`(?s)<em[^>]*>(.*?)</em>`)
+	anchorTagRegex  = regexp.MustCompile(`(?s)<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)</a>`)
+	ulTagRegex      = regexp.MustCompile(`(?i)<ul[^>]*>`)
+	ulEndTagRegex   = regexp.MustCompile(`(?i)</ul>`)
+	liTagRegex      = regexp.MustCompile(`(?s)<li[^>]*>(.*?)</li>`)
+	anyTagRegex     = regexp.MustCompile(`<[^>]+>`)
+	disclaimerRegex = regexp.MustCompile(`(?is)\*?Please be advised this transcript is AI-generated.*?(?:ad-supported version of the show|approximate times|word for word)\.?\*?`)
 
 	// Metadata parsing regexes
 	postTitleRegex   = regexp.MustCompile(`<h1 class="post-title">(.*?)</h1>`)
@@ -59,14 +61,35 @@ var (
 	tsPattern3 = regexp.MustCompile(`^(.+?)\s*\((\d+:\d+(?::\d+)?)\)\s*:?\s*(.*)`)
 	// Pattern 4: (HH:MM:SS): (Discovered 2022)
 	tsPattern4 = regexp.MustCompile(`^\((\d+:\d+(?::\d+)?)\)\s*:?\s*(.*)`)
+	// Pattern 5: Speaker Name: (no timestamp, for older plain-text transcripts)
+	// Also handles markdown bold/italic: "**Leo Laporte:** ...", "*Leo:* ..."
+	speakerNameRegex = regexp.MustCompile(`^\*{0,2}([A-Z][a-zA-Z'.\-]+(?:\s+[A-Z][a-zA-Z'.\-]+)*)\*{0,2}\s*:\s*\*{0,2}\s*(.*)`)
 
-	// Generic Lookahead for line merging logic
+	// Episode number from title (e.g. "This Week in Tech 638 Transcript")
+	titleEpRegex = regexp.MustCompile(`(\d+)\s*(?:\(|$|[Tt]ranscript)`)
+
+	// Generic Lookahead for line merging logic (includes Pattern 5 speaker check)
 	genericTSMatch = regexp.MustCompile(`^(\d+:\d+|.+?\s*\[\d+:\d+|\(\d+:\d+|.+?\s*\(\d+:\d+)`)
 )
 
 // extractYear pulls a 4-digit year from a date string
 func extractYear(dateStr string) int {
 	matches := yearCaptureRegex.FindStringSubmatch(dateStr)
+	if len(matches) > 1 {
+		val, _ := strconv.Atoi(matches[1])
+		return val
+	}
+	return 0
+}
+
+// extractEpFromTitle extracts an episode number from the HTML title text.
+// Handles formats like "This Week in Tech 638 Transcript", "Security Now 1000 transcript",
+// "This Week in Google 233 (Transcript)"
+func extractEpFromTitle(title string) int {
+	if title == "" {
+		return 0
+	}
+	matches := titleEpRegex.FindStringSubmatch(title)
 	if len(matches) > 1 {
 		val, _ := strconv.Atoi(matches[1])
 		return val
@@ -90,6 +113,7 @@ func parseDateYMD(dateStr string) string {
 		"Jan 02 2006",
 		"Monday, January 02, 2006",
 		"January 02, 2006",
+		"Jan 02, 2006",
 	}
 
 	for _, layout := range layouts {
@@ -112,16 +136,17 @@ func HTMLToMarkdown(html string, epNum int, dateYMD string) string {
 	text = scriptTagRegex.ReplaceAllString(text, "")
 	text = styleTagRegex.ReplaceAllString(text, "")
 
+	// Remove AI-generated disclaimer
+	text = disclaimerRegex.ReplaceAllString(text, "")
+
 	// Headers
 	text = h1TagRegex.ReplaceAllString(text, "# $1\n\n")
 	text = h2TagRegex.ReplaceAllString(text, "## $1\n\n")
 	text = h3TagRegex.ReplaceAllString(text, "### $1\n\n")
 
-	// Paragraphs
-	text = pTagRegex.ReplaceAllString(text, "$1\n\n")
-
-	// Breaks
-	text = brTagRegex.ReplaceAllString(text, "\n")
+	// --- Structural Tag Preservation ---
+	// Replace table/paragraph/break tags with newlines to prevent text collapse
+	text = structTagRegex.ReplaceAllString(text, "\n")
 
 	// Bold
 	text = boldTagRegex.ReplaceAllString(text, "**$1**")
@@ -177,8 +202,10 @@ func HTMLToMarkdown(html string, epNum int, dateYMD string) string {
 		}
 	}
 
-	// --- Timestamp Standardization Pass ---
+	// --- Context-Tracking Pass ---
 	var finalLines []string
+	var currentTimestamp, currentSpeaker string
+
 	for i := 0; i < len(rawLines); i++ {
 		line := rawLines[i]
 		if line == "" {
@@ -186,70 +213,58 @@ func HTMLToMarkdown(html string, epNum int, dateYMD string) string {
 			continue
 		}
 
-		var timestamp, speaker, restOfLine string
-		var matched bool
+		content := line
+		foundNewMetadata := false
 
-		// Check Pattern 1: HH:MM:SS - Speaker
+		// Try matching speaker/timestamp patterns
 		if matches := tsPattern1.FindStringSubmatch(line); len(matches) > 1 && len(line) > 0 && line[0] >= '0' && line[0] <= '9' {
-			timestamp = matches[1]
-			restOfLine = strings.TrimSpace(matches[2])
-			speaker = "" // Format will be TS - restOfLine
-			matched = true
-		} else if matches := tsPattern2.FindStringSubmatch(line); len(matches) > 3 { // Pattern 2: Speaker [HH:MM:SS]:
-			speaker = strings.TrimSpace(matches[1])
-			timestamp = strings.TrimSpace(matches[2])
-			restOfLine = strings.TrimSpace(matches[3])
-			// Cleanup colon if it lingered in restOfLine
-			if strings.HasPrefix(restOfLine, ":") {
-				restOfLine = strings.TrimSpace(restOfLine[1:])
-			}
-			matched = true
-		} else if matches := tsPattern3.FindStringSubmatch(line); len(matches) > 3 { // Pattern 3: Speaker (HH:MM:SS):
-			speaker = strings.TrimSpace(matches[1])
-			timestamp = strings.TrimSpace(matches[2])
-			restOfLine = strings.TrimSpace(matches[3])
-			if strings.HasPrefix(restOfLine, ":") {
-				restOfLine = strings.TrimSpace(restOfLine[1:])
-			}
-			matched = true
-		} else if matches := tsPattern4.FindStringSubmatch(line); len(matches) > 2 { // Pattern 4: (HH:MM:SS):
-			timestamp = strings.TrimSpace(matches[1])
-			restOfLine = strings.TrimSpace(matches[2])
-			if strings.HasPrefix(restOfLine, ":") {
-				restOfLine = strings.TrimSpace(restOfLine[1:])
-			}
-			speaker = ""
-			matched = true
+			currentTimestamp = matches[1]
+			content = strings.TrimSpace(matches[2])
+			foundNewMetadata = true
+		} else if matches := tsPattern2.FindStringSubmatch(line); len(matches) > 3 {
+			currentSpeaker = strings.TrimSpace(matches[1])
+			currentTimestamp = strings.TrimSpace(matches[2])
+			content = strings.TrimSpace(matches[3])
+			foundNewMetadata = true
+		} else if matches := tsPattern3.FindStringSubmatch(line); len(matches) > 3 {
+			currentSpeaker = strings.TrimSpace(matches[1])
+			currentTimestamp = strings.TrimSpace(matches[2])
+			content = strings.TrimSpace(matches[3])
+			foundNewMetadata = true
+		} else if matches := tsPattern4.FindStringSubmatch(line); len(matches) > 2 {
+			currentTimestamp = strings.TrimSpace(matches[1])
+			content = strings.TrimSpace(matches[2])
+			foundNewMetadata = true
+		} else if matches := speakerNameRegex.FindStringSubmatch(line); len(matches) > 2 {
+			currentSpeaker = strings.TrimSpace(matches[1])
+			content = strings.TrimSpace(matches[2])
+			foundNewMetadata = true
 		}
 
-		if matched {
-			prefix := fmt.Sprintf("EP:%d Date:%s TS:%s -", epNum, dateYMD, timestamp)
-			if speaker != "" {
-				prefix = fmt.Sprintf("EP:%d Date:%s TS:%s - %s", epNum, dateYMD, timestamp, speaker)
-			}
+		if foundNewMetadata && strings.HasPrefix(content, ":") {
+			content = strings.TrimSpace(content[1:])
+		}
 
-			// Merge current restOfLine and potentially the next line if it's not a timestamp
-			mergedText := restOfLine
-			if i+1 < len(rawLines) {
-				nextLine := strings.TrimSpace(rawLines[i+1])
-				isNextTS := genericTSMatch.MatchString(nextLine)
-				if nextLine != "" && !isNextTS {
-					if mergedText != "" {
-						mergedText += " " + nextLine
-					} else {
-						mergedText = nextLine
-					}
-					i++ // Consume next line
-				}
-			}
+		// If line only contains metadata, don't output yet, just keep the context
+		if foundNewMetadata && content == "" {
+			continue
+		}
 
-			if mergedText != "" {
-				finalLines = append(finalLines, fmt.Sprintf("%s %s", prefix, mergedText))
-			} else {
-				finalLines = append(finalLines, prefix)
-			}
+		// Build prefix
+		prefix := fmt.Sprintf("EP:%d Date:%s", epNum, dateYMD)
+		if currentTimestamp != "" {
+			prefix += " TS:" + currentTimestamp
+		}
+		if currentSpeaker != "" {
+			prefix += " - " + currentSpeaker
 		} else {
-			finalLines = append(finalLines, line)
+			prefix += " -"
+		}
+
+		if content != "" {
+			finalLines = append(finalLines, prefix+" "+content)
+		} else {
+			finalLines = append(finalLines, prefix)
 		}
 	}
 
@@ -283,6 +298,10 @@ func ParseTranscriptFile(path string) (string, string, int, string, error) {
 	}
 
 	epNum := GetEpNum(path)
+	// Fallback: extract episode number from title if filename-based extraction returned 0
+	if epNum == 0 {
+		epNum = extractEpFromTitle(title)
+	}
 	dateYMD := parseDateYMD(dateStr)
 
 	return title, dateStr, year, HTMLToMarkdown(rawBody, epNum, dateYMD), nil

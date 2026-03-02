@@ -19,11 +19,20 @@ type Item struct {
 	Title string
 }
 
-// DownloadPage downloads content from a URL with retries
-func DownloadPage(url string) (string, error) {
+// DownloadPage downloads content from a URL with retries and throttling
+func DownloadPage(url string, throttle time.Duration) (string, error) {
 	var lastErr error
 	for retries := 3; retries > 0; retries-- {
-		resp, err := http.Get(url)
+		client := &http.Client{}
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			lastErr = err
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		req.Header.Set("User-Agent", config.UserAgent)
+
+		resp, err := client.Do(req)
 		if err != nil {
 			lastErr = err
 			time.Sleep(2 * time.Second)
@@ -43,8 +52,10 @@ func DownloadPage(url string) (string, error) {
 			time.Sleep(2 * time.Second)
 			continue
 		}
-		
-		time.Sleep(1 * time.Second) // Be nice
+
+		if throttle > 0 {
+			time.Sleep(throttle)
+		}
 		return string(body), nil
 	}
 	return "", fmt.Errorf("failed after retries: %v", lastErr)
@@ -52,9 +63,9 @@ func DownloadPage(url string) (string, error) {
 
 // GetListPageWithCacheStatus retrieves the list page content, using cache if appropriate
 // Returns content, isCached, error
-func GetListPageWithCacheStatus(pageNum int, dataDir string, forceRefresh bool) (string, bool, error) {
+func GetListPageWithCacheStatus(pageNum int, dataDir string, forceRefresh bool, throttle time.Duration) (string, bool, error) {
 	filename := filepath.Join(dataDir, fmt.Sprintf("transcripts_page_%d.html", pageNum))
-	
+
 	shouldDownload := true
 	if !forceRefresh {
 		if utils.FileExists(filename) {
@@ -67,32 +78,32 @@ func GetListPageWithCacheStatus(pageNum int, dataDir string, forceRefresh bool) 
 			}
 		}
 	}
-	
+
 	if !shouldDownload {
 		content, err := os.ReadFile(filename)
 		if err == nil {
 			return string(content), true, nil
 		}
 	}
-	
+
 	url := config.BaseListURL
 	if pageNum > 1 {
 		url = fmt.Sprintf("%s?page=%d", url, pageNum)
 	}
-	
+
 	fmt.Printf("Downloading list page %d: %s\n", pageNum, url)
-	content, err := DownloadPage(url)
+	content, err := DownloadPage(url, throttle)
 	if err != nil {
 		return "", false, err
 	}
-	
+
 	err = os.WriteFile(filename, []byte(content), 0644)
 	return content, false, err
 }
 
 // Wrapper for backward compatibility if needed, though we updated main.go
-func GetListPage(pageNum int, dataDir string, forceRefresh bool) (string, error) {
-	content, _, err := GetListPageWithCacheStatus(pageNum, dataDir, forceRefresh)
+func GetListPage(pageNum int, dataDir string, forceRefresh bool, throttle time.Duration) (string, error) {
+	content, _, err := GetListPageWithCacheStatus(pageNum, dataDir, forceRefresh, throttle)
 	return content, err
 }
 
@@ -101,7 +112,7 @@ func ExtractItems(html string) []Item {
 	// <div class="item summary">.*?<h2 class="title"><a href="([^"]+)">([^<]+)</a></h2>
 	re := regexp.MustCompile(`(?s)<div class="item summary">.*?<h2 class="title"><a href="([^"]+)">([^<]+)</a></h2>`)
 	matches := re.FindAllStringSubmatch(html, -1)
-	
+
 	var items []Item
 	for _, match := range matches {
 		if len(match) >= 3 {
@@ -110,7 +121,7 @@ func ExtractItems(html string) []Item {
 			if !strings.HasPrefix(url, "/") {
 				continue
 			}
-			
+
 			items = append(items, Item{
 				URL:   url,
 				Title: strings.TrimSpace(match[2]),
@@ -122,7 +133,7 @@ func ExtractItems(html string) []Item {
 
 // DownloadTranscriptWithStatus downloads a specific transcript
 // Returns skipped (bool) and error
-func DownloadTranscriptWithStatus(urlPath, title, prefix, dataDir string) (bool, error) {
+func DownloadTranscriptWithStatus(urlPath, title, prefix, dataDir string, throttle time.Duration) (bool, error) {
 	// Extract episode number
 	re := regexp.MustCompile(`(\d+)`)
 	matches := re.FindStringSubmatch(title)
@@ -130,26 +141,26 @@ func DownloadTranscriptWithStatus(urlPath, title, prefix, dataDir string) (bool,
 	if len(matches) > 1 {
 		epNum = matches[1]
 	}
-	
+
 	filename := filepath.Join(dataDir, fmt.Sprintf("%s_%s.html", prefix, epNum))
-	
+
 	if utils.FileExists(filename) {
 		return true, nil // Skipped
 	}
-	
+
 	fullURL := config.BaseSiteURL + urlPath
 	fmt.Printf("Downloading %s %s: %s\n", prefix, epNum, title)
-	
-	content, err := DownloadPage(fullURL)
+
+	content, err := DownloadPage(fullURL, throttle)
 	if err != nil {
 		return false, err
 	}
-	
+
 	return false, os.WriteFile(filename, []byte(content), 0644)
 }
 
 // Wrapper
-func DownloadTranscript(urlPath, title, prefix, dataDir string) error {
-	_, err := DownloadTranscriptWithStatus(urlPath, title, prefix, dataDir)
+func DownloadTranscript(urlPath, title, prefix, dataDir string, throttle time.Duration) error {
+	_, err := DownloadTranscriptWithStatus(urlPath, title, prefix, dataDir, throttle)
 	return err
 }
